@@ -1,3 +1,3 @@
-// Placeholder barrel for the shared module. Real exports arrive with the
-// core logic tasks (rules, rng, curve, solver, generator).
-export {};
+// Public API of the shared module.
+export * from './rules';
+export * from './rng';
