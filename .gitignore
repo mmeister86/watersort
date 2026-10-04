@@ -1,5 +1,9 @@
 node_modules/
 dist/
+web/dist/
+server/dist/
+shared/dist/
+.vite
 .DS_Store
 .superpowers/
 *.tmp

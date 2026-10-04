@@ -1,0 +1,24 @@
+{
+  "name": "watersort",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "web",
+    "server"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build -w @watersort/web && npm run build -w @watersort/server",
+    "test": "vitest run",
+    "test:full": "WATERSORT_FULL_LEVELS=1 vitest run",
+    "typecheck": "tsc --noEmit -p shared && tsc --noEmit -p web && tsc --noEmit -p server"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  }
+}
