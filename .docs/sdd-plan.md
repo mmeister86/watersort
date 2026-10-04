@@ -73,9 +73,11 @@ Bands (start–end, K range, H, E, moves):
 | B2 | 6–20 | 4–5 | 4 | 2 | 12–25 |
 | B3 | 21–50 | 6–7 | 4 | 2 | 20–35 |
 | B4 | 51–100 | 8–9 | 4 | 2 | 30–50 |
-| B5 | 101–200 | 10–11 | 4 | 2 | 40–60 |
+| B5 | 101–200 | 10–11 | 4 | 2 | 15–60 |
 | B6 | 201–400 | 12 | 5 | 2 | 50–75 |
-| B7 | 401+ | 12–14 | 5 | 2 | 60–90 |
+| B7 | 401+ | 12–14 | 5 | 2 | 35–90 |
+
+Tuning note (validated by full 1–500 soak): the near-optimal solver finds solutions SHORTER than AGENTS.md's starting minMoves for B5 (found ~33 vs min 40) and B7 (found ~52 vs min 60), making those bands unreachable and degenerating the retry loop. AGENTS.md marks the curve as "starting values, tune after playtests" — B5 min is tuned 40→15 and B7 min 60→35. All other bands unchanged.
 
 Color ramp inside a band: `K = Kmin + floor((m - start) * (Kmax - Kmin + 1) / (end - start + 1))` where `m` is the level evaluated inside the band. For B7 (unbounded): `K = 12 + min(2, floor((n - 401) / 200))` (401–600 → 12, 601–800 → 13, 801+ → 14).
 
@@ -98,9 +100,9 @@ Exact test vectors (assert full param objects):
 - n=150 (sawtooth→B4 at 100): {colors:9, capacity:4, empty:2, hidden:true, minMoves:30, maxMoves:50}
 - n=200 (sawtooth→B4 at 100): {colors:9, capacity:4, empty:2, hidden:true, minMoves:30, maxMoves:50}
 - n=201: {colors:12, capacity:5, empty:2, hidden:true, minMoves:50, maxMoves:75}
-- n=400 (sawtooth→B5 at 200): {colors:11, capacity:4, empty:2, hidden:true, minMoves:40, maxMoves:60}
-- n=401: {colors:12, capacity:5, empty:2, hidden:true, minMoves:60, maxMoves:90}
-- n=420 (boss): {colors:12, capacity:5, empty:1, hidden:true, minMoves:60, maxMoves:90}
+- n=400 (sawtooth→B5 at 200): {colors:11, capacity:4, empty:2, hidden:true, minMoves:15, maxMoves:60}
+- n=401: {colors:12, capacity:5, empty:2, hidden:true, minMoves:35, maxMoves:90}
+- n=420 (boss): {colors:12, capacity:5, empty:1, hidden:true, minMoves:35, maxMoves:90}
 - n=425 (sawtooth→B6 at 400): {colors:12, capacity:5, empty:2, hidden:true, minMoves:50, maxMoves:75}
 - n=601: colors 13; n=801: colors 14
 
