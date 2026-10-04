@@ -6,4 +6,5 @@ shared/dist/
 .vite
 .DS_Store
 .superpowers/
+data/
 *.tmp

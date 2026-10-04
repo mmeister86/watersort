@@ -1,19 +1,64 @@
-import { createServer } from 'node:http';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// Placeholder health route. The real Hono app replaces this in Task 9.
+import { serve } from '@hono/node-server';
+
+import { createApp } from './app';
+import { Store, probeDataDir } from './store';
+
 const port = Number(process.env.PORT ?? 3000);
+const dataDir = process.env.DATA_DIR ?? './data';
+const familyCode = process.env.FAMILY_CODE ?? '';
+const cookieSecret = process.env.COOKIE_SECRET ?? '';
 
-const server = createServer((request, response) => {
-  if (request.url === '/api/health') {
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({ ok: true }));
-    return;
+if (familyCode === '') {
+  console.warn('WARNING: FAMILY_CODE is empty; the login code is not protected.');
+}
+if (cookieSecret === '') {
+  console.warn('WARNING: COOKIE_SECRET is empty; session cookies are not secure.');
+}
+
+// Fail loudly when the data volume is not writable, before serving anything.
+try {
+  probeDataDir(dataDir);
+} catch (error) {
+  console.error(`FATAL: DATA_DIR "${dataDir}" is not writable:`, error);
+  process.exit(1);
+}
+
+/**
+ * Locates the built SPA. In the repo it lives at `web/dist`; the Docker
+ * runtime copies it to `public/`. Checked relative to both the process cwd
+ * and the bundle location so local runs and the container both work.
+ */
+function findStaticDir(): string | undefined {
+  const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+  const candidates = [
+    resolve(process.cwd(), 'web/dist'),
+    resolve(repoRoot, 'web/dist'),
+    resolve(process.cwd(), 'public'),
+    resolve(repoRoot, 'public'),
+  ];
+  for (const dir of candidates) {
+    if (existsSync(join(dir, 'index.html'))) {
+      return dir;
+    }
   }
+  console.warn(
+    'WARNING: no built web app found (looked for web/dist and public/); serving API only.',
+  );
+  return undefined;
+}
 
-  response.writeHead(404);
-  response.end();
+const staticDir = findStaticDir();
+const store = new Store({ dataDir });
+const app = createApp(store, {
+  familyCode,
+  cookieSecret,
+  ...(staticDir === undefined ? {} : { staticDir }),
 });
 
-server.listen(port, () => {
-  console.log(`server listening on http://localhost:${port}`);
+serve({ fetch: app.fetch, port }, (info) => {
+  console.log(`server listening on http://localhost:${info.port}`);
 });
