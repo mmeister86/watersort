@@ -1,0 +1,492 @@
+/* ==========================================================================
+   Water Sort — design system
+   Imported once from src/main.ts. Layout follows AGENTS.md section 7.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* ---------------------------------------------------------------------
+     Palette. Custom property ids 1..14 match shared/src/rules.ts colorName:
+     1 rot, 2 blau, 3 grün, 4 gelb, 5 orange, 6 violett, 7 pink, 8 türkis,
+     9 braun, 10 hellblau, 11 dunkelgrün, 12 grau, 13 schwarz, 14 weiß.
+     Chosen to stay distinguishable for the most common color-vision types.
+     --------------------------------------------------------------------- */
+  --color-1: #ef4444; /* rot */
+  --color-2: #3b82f6; /* blau */
+  --color-3: #22c55e; /* grün */
+  --color-4: #facc15; /* gelb */
+  --color-5: #f97316; /* orange */
+  --color-6: #a855f7; /* violett */
+  --color-7: #ec4899; /* pink */
+  --color-8: #14b8a6; /* türkis */
+  --color-9: #92400e; /* braun */
+  --color-10: #7dd3fc; /* hellblau */
+  --color-11: #166534; /* dunkelgrün */
+  --color-12: #9ca3af; /* grau */
+  --color-13: #111827; /* schwarz */
+  --color-14: #f8fafc; /* weiß */
+
+  /* Surfaces and text */
+  --bg: #0b1120;
+  --bg-elevated: #0f172a;
+  --surface: #16213a;
+  --surface-2: #1e2b47;
+  --surface-3: #253356;
+  --border: #2a3a5c;
+  --text: #e8eefc;
+  --text-muted: #9fb0d0;
+  --accent: #38bdf8;
+  --accent-strong: #0ea5e9;
+  --accent-contrast: #052033;
+  --danger: #f87171;
+  --focus: #fbbf24;
+
+  /* Tubes */
+  --tube-bg: #0d1830;
+  --tube-border: #4b628c;
+
+  /* Metrics */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --gap: clamp(0.5rem, 2vw, 1rem);
+  --font:
+    system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(1200px 800px at 50% -10%, #17233f 0%, var(--bg) 60%);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+/* --------------------------------------------------------------------------
+   App frame: never scrolls, one active screen at a time.
+   -------------------------------------------------------------------------- */
+
+#app {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.screen {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.screen.is-active {
+  display: flex;
+}
+
+/* Shared surfaces */
+
+.panel {
+  margin: auto;
+  width: min(100% - 2 * var(--gap), 26rem);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.75rem, 2.5vw, 1.25rem);
+  padding: clamp(1.25rem, 5vw, 2rem);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 35%);
+}
+
+.panel--wide {
+  width: min(100% - 2 * var(--gap), 34rem);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.5rem, 6vw, 2.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.subtitle,
+.muted {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: clamp(0.95rem, 3.4vw, 1.1rem);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Forms and buttons */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.75rem, 2.5vw, 1rem);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.field__label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.input {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  font: inherit;
+  font-size: 1.05rem;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.input::placeholder {
+  color: #6b7fa8;
+}
+
+.input:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.form__error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.button {
+  appearance: none;
+  padding: 0.7rem 1rem;
+  min-height: 2.75rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.button:hover {
+  background: var(--surface-3);
+}
+
+.button:active {
+  transform: translateY(1px);
+}
+
+.button:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button--primary {
+  color: var(--accent-contrast);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.button--primary:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* --------------------------------------------------------------------------
+   Player picker
+   -------------------------------------------------------------------------- */
+
+.player-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.player-list__empty {
+  margin: 0;
+  padding: 0.5rem 0;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.player {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+}
+
+.player__dot {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 25%);
+}
+
+/* --------------------------------------------------------------------------
+   Game screen
+   -------------------------------------------------------------------------- */
+
+.screen--game {
+  padding: calc(var(--gap) + env(safe-area-inset-top)) var(--gap)
+    calc(var(--gap) + env(safe-area-inset-bottom));
+}
+
+.game {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.hud {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 0 0.25rem;
+}
+
+.hud__stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.hud__label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.hud__value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Board area: centred, clipped, never scrolls. */
+
+.board-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.board {
+  --tube-width: clamp(2rem, 8.5vw, 3.4rem);
+  --unit-height: clamp(0.7rem, 2.8vw, 1.1rem);
+  --cols: 8;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), auto);
+  justify-content: center;
+  align-content: center;
+  gap: clamp(0.4rem, 2.2vw, 1rem);
+  max-width: 100%;
+}
+
+.board__placeholder {
+  grid-column: 1 / -1;
+  margin: 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+}
+
+/* Tubes. Classes are consumed by the board renderer in Task 8. */
+
+.tube {
+  position: relative;
+  display: flex;
+  flex-direction: column-reverse;
+  width: var(--tube-width);
+  height: calc(var(--capacity, 4) * var(--unit-height));
+  padding: 0;
+  background: var(--tube-bg);
+  border: 2px solid var(--tube-border);
+  border-top-color: transparent;
+  border-radius: 0.25rem 0.25rem 1.1rem 1.1rem;
+  box-shadow: inset 0 6px 12px rgb(0 0 0 / 35%);
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.tube:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .tube:hover {
+    transform: translateY(-0.2rem);
+  }
+}
+
+.tube.is-selected {
+  transform: translateY(-0.4rem);
+  box-shadow: 0 10px 22px rgb(0 0 0 / 40%);
+}
+
+.tube.is-legal {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tube.is-animating {
+  transition: transform 250ms ease;
+}
+
+.unit {
+  flex: 0 0 var(--unit-height);
+  width: 100%;
+  height: var(--unit-height);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%);
+}
+
+.unit.is-hidden {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--surface-2);
+}
+
+.unit.is-hidden::after {
+  content: '?';
+}
+
+.unit[data-color='1'] { background: var(--color-1); }
+.unit[data-color='2'] { background: var(--color-2); }
+.unit[data-color='3'] { background: var(--color-3); }
+.unit[data-color='4'] { background: var(--color-4); }
+.unit[data-color='5'] { background: var(--color-5); }
+.unit[data-color='6'] { background: var(--color-6); }
+.unit[data-color='7'] { background: var(--color-7); }
+.unit[data-color='8'] { background: var(--color-8); }
+.unit[data-color='9'] { background: var(--color-9); }
+.unit[data-color='10'] { background: var(--color-10); }
+.unit[data-color='11'] { background: var(--color-11); }
+.unit[data-color='12'] { background: var(--color-12); }
+.unit[data-color='13'] { background: var(--color-13); }
+.unit[data-color='14'] { background: var(--color-14); }
+
+/* Controls sit in the thumb zone on phones and below the board on desktop. */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(0.4rem, 2vw, 0.75rem);
+}
+
+.controls .button {
+  flex: 0 1 auto;
+  min-width: 5.5rem;
+}
+
+/* --------------------------------------------------------------------------
+   Level complete
+   -------------------------------------------------------------------------- */
+
+.screen--complete .panel {
+  align-items: center;
+  text-align: center;
+}
+
+.stars {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: clamp(1.6rem, 7vw, 2.4rem);
+  line-height: 1;
+}
+
+.star {
+  color: #3a4a6b;
+}
+
+.star.is-filled {
+  color: var(--focus);
+}
+
+/* --------------------------------------------------------------------------
+   Motion preferences
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
