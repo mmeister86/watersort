@@ -19,7 +19,7 @@ import { createGameController, LOCAL_PLAYER_ID, type SolvedInfo } from './ui/gam
 import { createIosHint } from './ui/iosHint';
 import { createPlayerController } from './ui/playerScreen';
 import { createScreens } from './ui/screens';
-import { generate } from './worker/client';
+import { generate, solveFirstMove } from './worker/client';
 
 const container = document.querySelector<HTMLDivElement>('#app');
 
@@ -155,6 +155,7 @@ const game = createGameController({
   storage,
   playerId: LOCAL_PLAYER_ID,
   generate,
+  solve: solveFirstMove,
   onSolved: (info) => {
     void reportSolved(info);
   },

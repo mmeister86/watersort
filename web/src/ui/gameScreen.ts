@@ -8,6 +8,7 @@
 // `restoreState` can be imported by node tests.
 
 import type { Level } from '@shared/generator';
+import type { Board } from '@shared/rules';
 import type { AppStorage, PlayerProgress } from '../storage';
 
 import {
@@ -21,6 +22,8 @@ import {
   type GameState,
   type StatsDelta,
 } from '../game/state';
+import { stars } from '../game/stars';
+import { solveFirstMove, type SolutionResult } from '../worker/client';
 import { createBoardView } from './board';
 import { keyboardAction, type KeyAction } from './input';
 import type { ScreenManager } from './screens';
@@ -31,6 +34,9 @@ export const LOCAL_PLAYER_ID = 'local';
 
 /** Pour transition duration; must match `.tube.is-pouring` in styles.css. */
 export const POUR_MS = 250;
+
+/** How long the hint highlight stays on the recommended tubes. */
+export const HINT_MS = 2000;
 
 /** What the caller learns when a level is won (before „Weiter"). */
 export type SolvedInfo = {
@@ -45,6 +51,8 @@ export type GameDeps = {
   storage: AppStorage;
   playerId: string;
   generate: (n: number) => Promise<Level>;
+  /** Solves a board for the hint button; defaults to the generation worker. */
+  solve?: (board: Board, capacity: number) => Promise<SolutionResult>;
   /** Called once per freshly won level, not on a restored solved board. */
   onSolved?: (info: SolvedInfo) => void;
   /** Called when the player wants to return to the player picker. */
@@ -131,6 +139,7 @@ function requireElement<T extends Element>(root: ParentNode, selector: string): 
 /** Builds the controller and wires the game screen's buttons immediately. */
 export function createGameController(deps: GameDeps): GameController {
   const { screens, storage, generate, onSolved, onSwitchPlayer } = deps;
+  const solve = deps.solve ?? solveFirstMove;
   let playerId = deps.playerId;
 
   const gameScreen = screens.screens.game;
@@ -140,8 +149,12 @@ export function createGameController(deps: GameDeps): GameController {
   const movesElement = gameScreen.querySelector<HTMLElement>('[data-hud="moves"]');
   const undoButton = gameScreen.querySelector<HTMLButtonElement>('[data-action="undo"]');
   const restartButton = gameScreen.querySelector<HTMLButtonElement>('[data-action="restart"]');
+  const hintButton = gameScreen.querySelector<HTMLButtonElement>('[data-action="hint"]');
+  const symbolsButton = gameScreen.querySelector<HTMLButtonElement>('[data-action="color-blind"]');
+  const hintMessageElement = gameScreen.querySelector<HTMLElement>('[data-hint-message]');
   const nextButton = completeScreen.querySelector<HTMLButtonElement>('[data-action="next"]');
   const completeLevelElement = completeScreen.querySelector<HTMLElement>('[data-complete-level]');
+  const starsElement = completeScreen.querySelector<HTMLElement>('[data-stars]');
   const switchButtons = [
     ...gameScreen.querySelectorAll<HTMLButtonElement>('[data-action="switch-player"]'),
     ...completeScreen.querySelectorAll<HTMLButtonElement>('[data-action="switch-player"]'),
@@ -155,6 +168,7 @@ export function createGameController(deps: GameDeps): GameController {
   let selection: number | null = null;
   let locked = false;
   let started = false;
+  let colorBlind = storage.getSettings().colorBlind;
 
   function setHud(level: number, moves: number): void {
     if (levelElement !== null) levelElement.textContent = String(level);
@@ -185,7 +199,36 @@ export function createGameController(deps: GameDeps): GameController {
   function render(): HTMLButtonElement[] {
     if (state === null) return [];
     setHud(state.level.n, state.moves);
-    return view.update(state, selection);
+    return view.update(state, selection, colorBlind);
+  }
+
+  /** Reflects the persisted color-blind preference on the toggle button. */
+  function updateSymbolsButton(): void {
+    if (symbolsButton === null) return;
+    symbolsButton.setAttribute('aria-pressed', String(colorBlind));
+    symbolsButton.classList.toggle('is-active', colorBlind);
+  }
+
+  function setHintMessage(text: string): void {
+    if (hintMessageElement === null) return;
+    hintMessageElement.textContent = text;
+    hintMessageElement.hidden = false;
+  }
+
+  function clearHintMessage(): void {
+    if (hintMessageElement === null) return;
+    hintMessageElement.textContent = '';
+    hintMessageElement.hidden = true;
+  }
+
+  /** Fills or empties the three star glyphs and updates the screen-reader text. */
+  function updateStars(rating: 1 | 2 | 3): void {
+    if (starsElement === null) return;
+    const glyphs = starsElement.querySelectorAll<HTMLElement>('.star');
+    glyphs.forEach((glyph, index) => {
+      glyph.classList.toggle('is-filled', index < rating);
+    });
+    starsElement.setAttribute('aria-label', `${rating} von 3 Sternen`);
   }
 
   function persist(): void {
@@ -223,6 +266,9 @@ export function createGameController(deps: GameDeps): GameController {
     if (completeLevelElement !== null) {
       completeLevelElement.textContent = `Level ${level}`;
     }
+    if (state !== null) {
+      updateStars(stars(state.moves, state.level.solution.length));
+    }
     screens.show('complete');
     if (report && state !== null) {
       onSolved?.({
@@ -236,6 +282,7 @@ export function createGameController(deps: GameDeps): GameController {
   async function load(n: number, progress: PlayerProgress | null): Promise<void> {
     locked = true;
     selection = null;
+    clearHintMessage();
     renderLoading(n);
     screens.show('game');
 
@@ -272,6 +319,7 @@ export function createGameController(deps: GameDeps): GameController {
     state = next;
     selection = null;
     locked = true;
+    clearHintMessage();
     const tubes = render();
     persist();
     await animatePour(tubes[from], tubes[to]);
@@ -318,6 +366,7 @@ export function createGameController(deps: GameDeps): GameController {
     if (next === state) return;
     state = next;
     selection = null;
+    clearHintMessage();
     render();
     persist();
   }
@@ -326,8 +375,61 @@ export function createGameController(deps: GameDeps): GameController {
     if (locked || state === null) return;
     state = restartGame(state);
     selection = null;
+    clearHintMessage();
     render();
     persist();
+  }
+
+  /** Persists the color-blind preference and re-renders the symbols. */
+  function doToggleColorBlind(): void {
+    colorBlind = !colorBlind;
+    storage.setSettings({ colorBlind });
+    updateSymbolsButton();
+    render();
+  }
+
+  /**
+   * Asks the worker for a solve of the current board and highlights the
+   * recommended source and target for {@link HINT_MS}. When the board can no
+   * longer be solved, announces a German fallback suggesting undo. Free and
+   * unlimited; input is locked while the solve and the highlight run.
+   */
+  async function doHint(): Promise<void> {
+    if (locked || state === null) return;
+    const current = state;
+    locked = true;
+    if (hintButton !== null) hintButton.disabled = true;
+    clearHintMessage();
+
+    try {
+      const { solved, firstMove } = await solve(
+        current.board,
+        current.level.capacity,
+      );
+      // A different level may have loaded while the worker was thinking.
+      if (state !== current) return;
+      if (!solved || firstMove === null) {
+        setHintMessage("Hier geht's nicht weiter — versuch es mit Zurück.");
+        return;
+      }
+
+      selection = null;
+      const tubes = render();
+      const [from, to] = firstMove;
+      const source = tubes[from];
+      const target = tubes[to];
+      source?.classList.add('is-hint-source');
+      target?.classList.add('is-hint-target');
+      await wait(HINT_MS);
+      source?.classList.remove('is-hint-source');
+      target?.classList.remove('is-hint-target');
+    } catch (error) {
+      console.error('Failed to compute a hint', error);
+      setHintMessage('Tipp gerade nicht möglich.');
+    } finally {
+      locked = false;
+      if (hintButton !== null) hintButton.disabled = false;
+    }
   }
 
   async function doNext(): Promise<void> {
@@ -410,8 +512,14 @@ export function createGameController(deps: GameDeps): GameController {
     handleAction(action);
   }
 
+  updateSymbolsButton();
+
   undoButton?.addEventListener('click', doUndo);
   restartButton?.addEventListener('click', doRestart);
+  hintButton?.addEventListener('click', () => {
+    void doHint();
+  });
+  symbolsButton?.addEventListener('click', doToggleColorBlind);
   nextButton?.addEventListener('click', () => {
     void doNext();
   });

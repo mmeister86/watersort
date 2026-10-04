@@ -190,6 +190,13 @@ function createGameScreen(): HTMLElement {
   boardWrap.append(board);
   game.append(boardWrap);
 
+  // Live region for hint feedback (for example when no solve is available).
+  const hintMessage = el('p', 'game__hint');
+  hintMessage.dataset.hintMessage = '';
+  hintMessage.setAttribute('role', 'status');
+  hintMessage.hidden = true;
+  game.append(hintMessage);
+
   const controls = el('div', 'controls');
 
   const undo = button('Zurück');
@@ -203,10 +210,15 @@ function createGameScreen(): HTMLElement {
   const hint = button('Tipp');
   hint.dataset.action = 'hint';
 
+  const symbols = button('Symbole');
+  symbols.dataset.action = 'color-blind';
+  symbols.setAttribute('aria-label', 'Farbenblind-Modus');
+  symbols.setAttribute('aria-pressed', 'false');
+
   const switchPlayer = button('Spieler');
   switchPlayer.dataset.action = 'switch-player';
 
-  controls.append(undo, restart, hint, switchPlayer);
+  controls.append(undo, restart, hint, symbols, switchPlayer);
   game.append(controls);
 
   screen.append(game);

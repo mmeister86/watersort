@@ -15,6 +15,7 @@ import {
   type GameState,
   type VisibleUnit,
 } from '../game/state';
+import { colorSymbol } from './symbols';
 
 /** Hard cap on grid columns from AGENTS.md: two rows of at most 8 tubes. */
 export const MAX_COLUMNS = 8;
@@ -69,20 +70,34 @@ export type BoardView = {
   readonly element: HTMLElement;
   /**
    * Rebuilds every tube for `state` and returns the buttons in tube order.
-   * `selection` marks the lifted tube and highlights its legal targets. Focus
-   * on a tube button is restored by index across the rebuild so keyboard play
-   * survives the replaced DOM.
+   * `selection` marks the lifted tube and highlights its legal targets. When
+   * `colorBlind` is true every visible unit gets its color's symbol overlay.
+   * Focus on a tube button is restored by index across the rebuild so keyboard
+   * play survives the replaced DOM.
    */
-  update(state: GameState, selection: number | null): HTMLButtonElement[];
+  update(
+    state: GameState,
+    selection: number | null,
+    colorBlind?: boolean,
+  ): HTMLButtonElement[];
 };
 
-function createLayer(unit: VisibleUnit): HTMLDivElement {
+function createLayer(unit: VisibleUnit, colorBlind: boolean): HTMLDivElement {
   const layer = document.createElement('div');
   layer.className = 'unit';
   if (unit === HIDDEN_UNIT) {
     layer.classList.add('is-hidden');
   } else {
     layer.dataset.color = String(unit);
+    if (colorBlind) {
+      const symbol = document.createElement('span');
+      symbol.className = 'unit__symbol';
+      // The tube's aria-label already names the color, so the glyph is purely
+      // visual and must not be announced a second time.
+      symbol.setAttribute('aria-hidden', 'true');
+      symbol.textContent = colorSymbol(unit);
+      layer.append(symbol);
+    }
   }
   return layer;
 }
@@ -110,10 +125,12 @@ export function createBoardView(element: HTMLElement): BoardView {
   const update = (
     state: GameState,
     selection: number | null,
+    colorBlind = false,
   ): HTMLButtonElement[] => {
     const capacity = state.level.capacity;
     // Capture before the rebuild detaches the focused button.
     const focused = focusedTubeIndex(element);
+    element.classList.toggle('is-color-blind', colorBlind);
     element.style.setProperty('--cols', String(boardColumns(state.board.length)));
     element.style.setProperty('--capacity', String(capacity));
     element.replaceChildren();
@@ -127,7 +144,7 @@ export function createBoardView(element: HTMLElement): BoardView {
       button.className = 'tube';
       button.dataset.tube = String(index);
       for (const unit of units) {
-        button.append(createLayer(unit));
+        button.append(createLayer(unit, colorBlind));
       }
       button.setAttribute('aria-label', tubeAriaLabel(index, units, capacity));
 

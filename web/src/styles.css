@@ -247,6 +247,12 @@ body {
   border-color: var(--accent);
 }
 
+/* Toggle buttons such as the color-blind switch expose their state. */
+.button[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 /* --------------------------------------------------------------------------
    Player picker
    -------------------------------------------------------------------------- */
@@ -433,6 +439,14 @@ body {
   letter-spacing: 0.06em;
 }
 
+/* Hint feedback; a live region that only appears when there is a message. */
+.game__hint {
+  margin: 0;
+  text-align: center;
+  color: var(--focus);
+  font-size: 0.95rem;
+}
+
 /* Tubes. Classes are consumed by the board renderer in Task 8. */
 
 .tube {
@@ -474,6 +488,31 @@ body {
 .tube.is-legal {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Hint highlight: source in the focus colour, target in the accent colour, so
+   the recommended move reads as "from here to there". The pulse animation is
+   neutralized by the prefers-reduced-motion rule at the end of this file. */
+.tube.is-hint-source {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  animation: hint-pulse 600ms ease-in-out 2;
+}
+
+.tube.is-hint-target {
+  outline: 3px dashed var(--accent);
+  outline-offset: 2px;
+  animation: hint-pulse 600ms ease-in-out 2;
+}
+
+@keyframes hint-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(56 189 248 / 0%);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(56 189 248 / 30%);
+  }
 }
 
 /* Pour animation: the moving classes are added for ~250 ms by the controller
@@ -531,6 +570,26 @@ body {
 
 .unit.is-hidden::after {
   content: '?';
+}
+
+/* Color-blind mode: each visible unit gets a per-color glyph on top of the
+   colour. The glyph is drawn with `difference` blending so it stays readable
+   on both very light (weiß) and very dark (schwarz) units. Hidden units keep
+   their `?` and get no span at all. */
+.board.is-color-blind .unit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.unit__symbol {
+  font-size: calc(var(--unit-height) * 0.7);
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  mix-blend-mode: difference;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* Controls sit in the thumb zone on phones and below the board on desktop. */

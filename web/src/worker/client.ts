@@ -9,6 +9,14 @@ import type { Board } from '@shared/rules';
 
 import type { WorkerRequest, WorkerResponse } from './generator.worker';
 
+/** The worker's answer to a `solve` request. */
+export type SolutionResult = {
+  /** False when the solver exhausted its budget without finding a win. */
+  solved: boolean;
+  /** The recommended first move, or null when already solved/unsolvable. */
+  firstMove: [number, number] | null;
+};
+
 type Pending =
   | {
       kind: 'level';
@@ -17,7 +25,7 @@ type Pending =
     }
   | {
       kind: 'solution';
-      resolve: (firstMove: [number, number] | null) => void;
+      resolve: (result: SolutionResult) => void;
       reject: (reason: unknown) => void;
     };
 
@@ -53,7 +61,7 @@ function onMessage(event: MessageEvent<WorkerResponse>): void {
   if (response.type === 'solution') {
     const entry = take('solution');
     if (entry !== undefined && entry.kind === 'solution') {
-      entry.resolve(response.firstMove);
+      entry.resolve({ solved: response.solved, firstMove: response.firstMove });
     }
     return;
   }
@@ -107,13 +115,17 @@ export function generate(n: number): Promise<Level> {
   });
 }
 
-/** Solves `board` off the main thread and returns the recommended first move. */
+/**
+ * Solves `board` off the main thread. Resolves with whether a win was found and
+ * the recommended first move (null when there is none), so the hint button can
+ * tell "no move available" apart from "solver gave up".
+ */
 export function solveFirstMove(
   board: Board,
   capacity: number,
-): Promise<[number, number] | null> {
+): Promise<SolutionResult> {
   const request: WorkerRequest = { type: 'solve', board, capacity };
-  return new Promise<[number, number] | null>((resolve, reject) => {
+  return new Promise<SolutionResult>((resolve, reject) => {
     pending.push({ kind: 'solution', resolve, reject });
     getWorker().postMessage(request);
   });
