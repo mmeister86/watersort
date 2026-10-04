@@ -69,7 +69,9 @@ export type BoardView = {
   readonly element: HTMLElement;
   /**
    * Rebuilds every tube for `state` and returns the buttons in tube order.
-   * `selection` marks the lifted tube and highlights its legal targets.
+   * `selection` marks the lifted tube and highlights its legal targets. Focus
+   * on a tube button is restored by index across the rebuild so keyboard play
+   * survives the replaced DOM.
    */
   update(state: GameState, selection: number | null): HTMLButtonElement[];
 };
@@ -85,6 +87,24 @@ function createLayer(unit: VisibleUnit): HTMLDivElement {
   return layer;
 }
 
+/** Zero-based index of the tube button that currently has focus, if any. */
+function focusedTubeIndex(root: HTMLElement): number | null {
+  const active = document.activeElement;
+  if (!(active instanceof Element) || !root.contains(active)) {
+    return null;
+  }
+  const tube = active.closest('.tube');
+  if (tube === null) {
+    return null;
+  }
+  const raw = tube.getAttribute('data-tube');
+  if (raw === null) {
+    return null;
+  }
+  const index = Number(raw);
+  return Number.isInteger(index) ? index : null;
+}
+
 /** Creates the board view for the `[data-board]` element. */
 export function createBoardView(element: HTMLElement): BoardView {
   const update = (
@@ -92,6 +112,8 @@ export function createBoardView(element: HTMLElement): BoardView {
     selection: number | null,
   ): HTMLButtonElement[] => {
     const capacity = state.level.capacity;
+    // Capture before the rebuild detaches the focused button.
+    const focused = focusedTubeIndex(element);
     element.style.setProperty('--cols', String(boardColumns(state.board.length)));
     element.style.setProperty('--capacity', String(capacity));
     element.replaceChildren();
@@ -117,6 +139,10 @@ export function createBoardView(element: HTMLElement): BoardView {
 
       element.append(button);
       buttons.push(button);
+    }
+
+    if (focused !== null) {
+      buttons[focused]?.focus();
     }
     return buttons;
   };

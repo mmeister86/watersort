@@ -180,6 +180,12 @@ export function createGameController(deps: GameDeps): GameController {
     if (from === undefined || to === undefined || prefersReducedMotion()) {
       return;
     }
+    // The board was just rebuilt, so read layout once to commit each button's
+    // base style before the animating classes flip `transform`. Without this
+    // forced reflow the browser only ever sees the post-class style and skips
+    // the transition entirely (the tube would snap, not pour).
+    void from.offsetWidth;
+    void to.offsetWidth;
     from.classList.add('is-pouring');
     to.classList.add('is-receiving');
     await wait(POUR_MS);
@@ -389,6 +395,7 @@ export function createGameController(deps: GameDeps): GameController {
   }
 
   function stop(): void {
+    started = false;
     globalThis.removeEventListener('keydown', onKeyDown);
     boardElement.removeEventListener('pointerup', onPointerUp);
     boardElement.removeEventListener('click', onClick);
