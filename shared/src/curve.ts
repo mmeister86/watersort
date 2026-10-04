@@ -71,7 +71,9 @@ const BANDS: readonly Band[] = [
     colorsMax: 11,
     capacity: 4,
     empty: 2,
-    minMoves: 40,
+    // Tuned down from AGENTS.md's starting value 40: the solver finds
+    // solutions around 26-33 here, so 40 is unreachable. See Task 3 plan note.
+    minMoves: 15,
     maxMoves: 60,
   },
   {
@@ -91,7 +93,9 @@ const BANDS: readonly Band[] = [
     colorsMax: 14,
     capacity: 5,
     empty: 2,
-    minMoves: 60,
+    // Tuned down from AGENTS.md's starting value 60: the solver finds
+    // solutions around 45-55 here, so 60 is unreachable. See Task 3 plan note.
+    minMoves: 35,
     maxMoves: 90,
   },
 ];
