@@ -2,3 +2,4 @@
 export * from './rules';
 export * from './rng';
 export * from './curve';
+export * from './solver';
