@@ -4,7 +4,8 @@
 // inline "Falscher Code") from an unreachable server (offer offline play), and
 // reveals the offline escape hatch when the app boots without a reachable API.
 
-import { ApiError, setSession as defaultSetSession } from '../api';
+import { setSession as defaultSetSession } from '../api';
+import { performLogin } from '../flow';
 import type { ScreenManager } from './screens';
 
 /** Identifies the code form and its message slots in the DOM. */
@@ -81,21 +82,23 @@ export function createCodeController(deps: CodeScreenDeps): CodeController {
     clearMessages();
     offline.hidden = true;
 
-    void login(code)
-      .then(() => {
-        submitting = false;
-        input.value = '';
-        void onAuthenticated();
-      })
-      .catch((thrown: unknown) => {
-        submitting = false;
-        if (thrown instanceof ApiError && thrown.status === 401) {
+    void (async () => {
+      const outcome = await performLogin(code, login);
+      submitting = false;
+      switch (outcome.kind) {
+        case 'ok':
+          input.value = '';
+          await onAuthenticated();
+          return;
+        case 'wrong-code':
           setMessage('error', 'Falscher Code');
           return;
-        }
-        setMessage('notice', 'Server nicht erreichbar.');
-        offline.hidden = false;
-      });
+        case 'unreachable':
+          setMessage('notice', 'Server nicht erreichbar.');
+          offline.hidden = false;
+          return;
+      }
+    })();
   });
 
   offline.addEventListener('click', () => {

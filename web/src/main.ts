@@ -8,8 +8,9 @@
 
 import './styles.css';
 
-import { ApiError, listPlayers, type Player } from './api';
-import { enqueueProgress, flushPendingSync, mergeLevel } from './sync';
+import { listPlayers, type Player } from './api';
+import { resolveBoot } from './flow';
+import { createSyncCoordinator, mergeLevel } from './sync';
 import { createStorage, type PendingSyncEntry } from './storage';
 import { createCodeController } from './ui/codeScreen';
 import { createGameController, LOCAL_PLAYER_ID, type SolvedInfo } from './ui/gameScreen';
@@ -29,6 +30,10 @@ const screens = createScreens(container, 'code');
 // runs; a valid session swaps to the player picker as soon as it resolves.
 screens.show('code');
 
+// Serializes every flush so a solved level, the boot probe and the `online`
+// event can never PUT the same queued entry twice.
+const sync = createSyncCoordinator(storage);
+
 /** Reports one solve: queue it, then try to flush the whole queue. */
 async function reportSolved(info: SolvedInfo): Promise<void> {
   const entry: PendingSyncEntry = {
@@ -36,8 +41,8 @@ async function reportSolved(info: SolvedInfo): Promise<void> {
     level: info.level + 1,
     statsDelta: info.statsDelta,
   };
-  enqueueProgress(storage, entry);
-  await flushPendingSync(storage);
+  sync.enqueue(entry);
+  await sync.flush();
 }
 
 /**
@@ -46,6 +51,13 @@ async function reportSolved(info: SolvedInfo): Promise<void> {
  * server or missing session just leaves the queue in place.
  */
 async function flushProgress(knownPlayers?: Player[]): Promise<void> {
+  if (globalThis.navigator?.onLine === false) {
+    // Offline: leave the queue for the next `online` event. Still route through
+    // the coordinator so an already-running flush finishes first.
+    await sync.flush({ online: false });
+    return;
+  }
+
   let serverLevels: Map<string, number>;
   if (knownPlayers !== undefined) {
     serverLevels = new Map(knownPlayers.map((player) => [player.id, player.level]));
@@ -55,10 +67,11 @@ async function flushProgress(knownPlayers?: Player[]): Promise<void> {
       const players = await listPlayers();
       serverLevels = new Map(players.map((player) => [player.id, player.level]));
     } catch {
-      // No session or no network: flush with no confirmed levels.
+      // No session or no network: flush with no confirmed levels and let the
+      // queue decide what to attempt.
     }
   }
-  await flushPendingSync(storage, undefined, { serverLevels });
+  await sync.flush({ serverLevels });
 }
 
 /** Opens the game for `player`, merging the local and server level. */
@@ -71,19 +84,21 @@ async function playAs(player: Player): Promise<void> {
   await game.start(level);
 }
 
-/** Fetches the player list and shows the picker; falls back to the code gate. */
+/** Probes the session and shows the picker, code gate or offline offer. */
 async function openPicker(): Promise<void> {
-  try {
-    const players = await listPlayers();
-    await flushProgress(players);
-    playerScreen.show(players);
-  } catch (thrown: unknown) {
-    if (thrown instanceof ApiError && thrown.status === 401) {
+  const outcome = await resolveBoot(listPlayers);
+  switch (outcome.kind) {
+    case 'session':
+      await flushProgress(outcome.players);
+      playerScreen.show(outcome.players);
+      return;
+    case 'no-session':
       code.open();
       return;
-    }
-    code.open();
-    code.showOffline('Server nicht erreichbar.');
+    case 'unreachable':
+      code.open();
+      code.showOffline('Server nicht erreichbar.');
+      return;
   }
 }
 
@@ -110,8 +125,9 @@ const playerScreen = createPlayerController({
     void playAs(player);
   },
   onDeleted: () => {
-    // The active marker is cleared by `removePlayer`; nothing else to do while
-    // the picker is already the visible screen.
+    // Deletion only happens on the picker. Never auto-select a replacement;
+    // keep showing the remaining players.
+    screens.show('player-picker');
   },
 });
 
@@ -129,24 +145,8 @@ const game = createGameController({
   },
 });
 
-async function boot(): Promise<void> {
-  try {
-    const players = await listPlayers();
-    await flushProgress(players);
-    playerScreen.show(players);
-  } catch (thrown: unknown) {
-    if (thrown instanceof ApiError && thrown.status === 401) {
-      code.open();
-      return;
-    }
-    // Unreachable server: still allow play against the local board.
-    code.open();
-    code.showOffline('Server nicht erreichbar.');
-  }
-}
-
 globalThis.addEventListener('online', () => {
   void flushProgress();
 });
 
-void boot();
+void openPicker();

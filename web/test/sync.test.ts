@@ -6,7 +6,13 @@ import {
   type PendingSyncEntry,
   type StorageLike,
 } from '../src/storage';
-import { enqueueProgress, flushPendingSync, mergeLevel } from '../src/sync';
+import {
+  createSyncCoordinator,
+  enqueueProgress,
+  flushPendingSync,
+  mergeLevel,
+  type ProgressSender,
+} from '../src/sync';
 
 /** Minimal in-memory localStorage stand-in for the node test environment. */
 class MemoryStorage implements StorageLike {
@@ -190,5 +196,82 @@ describe('flushPendingSync', () => {
 
     expect(result).toEqual({ sent: 0, dropped: 0, remaining: 0 });
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('createSyncCoordinator', () => {
+  it('skips the network when offline and leaves the queue intact', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const queued = [entry('p1', 2)];
+    const storage = makeStorage(queued);
+    const sync = createSyncCoordinator(storage);
+
+    const result = await sync.flush({ online: false });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({ sent: 0, dropped: 0, remaining: 1 });
+    expect(storage.getPendingSync()).toEqual(queued);
+  });
+
+  it('serializes overlapping flushes so each entry is sent exactly once', async () => {
+    const storage = makeStorage([entry('p1', 2)]);
+    const sent: number[] = [];
+    let release!: () => void;
+    let signalStarted!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    let first = true;
+    const send: ProgressSender = async (queued) => {
+      sent.push(queued.level);
+      if (first) {
+        first = false;
+        signalStarted();
+        await gate;
+      }
+      return { level: queued.level };
+    };
+    const sync = createSyncCoordinator(storage, send);
+
+    const firstFlush = sync.flush();
+    await started;
+    // Enqueued while the first flush is awaiting its send.
+    sync.enqueue(entry('p1', 3));
+    const secondFlush = sync.flush();
+    release();
+    await Promise.all([firstFlush, secondFlush]);
+
+    expect(sent).toEqual([2, 3]);
+    expect(storage.getPendingSync()).toEqual([]);
+  });
+
+  it('does not clobber an entry enqueued during a flush', async () => {
+    const storage = makeStorage([entry('p1', 2)]);
+    let release!: () => void;
+    let signalStarted!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    const send: ProgressSender = async (queued) => {
+      signalStarted();
+      await gate;
+      return { level: queued.level };
+    };
+    const sync = createSyncCoordinator(storage, send);
+
+    const flushing = sync.flush();
+    await started;
+    sync.enqueue(entry('p1', 3));
+    release();
+    await flushing;
+
+    expect(storage.getPendingSync()).toEqual([entry('p1', 3)]);
   });
 });

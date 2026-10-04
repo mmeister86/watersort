@@ -7,12 +7,15 @@
 import { colorName } from '@shared/rules';
 
 import {
-  ApiError,
   createPlayer as apiCreatePlayer,
   deletePlayer as apiDeletePlayer,
   listPlayers as apiListPlayers,
   type Player,
 } from '../api';
+import {
+  performCreatePlayer,
+  performDeletePlayer,
+} from '../flow';
 import type { AppStorage } from '../storage';
 import type { ScreenManager } from './screens';
 
@@ -208,16 +211,20 @@ export function createPlayerController(deps: PlayerScreenDeps): PlayerController
     if (!confirmDelete(player.name)) return;
     busy = true;
     setNotice(null);
-    try {
-      await deletePlayer(player.id);
-    } catch (thrown: unknown) {
-      if (!(thrown instanceof ApiError && thrown.status === 404)) {
-        setNotice('Spieler konnte nicht gelöscht werden.');
-        busy = false;
-        return;
-      }
+
+    const outcome = await performDeletePlayer(
+      player.id,
+      deletePlayer,
+      (id) => {
+        storage.removePlayer(id);
+      },
+    );
+    if (outcome === 'failed') {
+      setNotice('Spieler konnte nicht gelöscht werden.');
+      busy = false;
+      return;
     }
-    storage.removePlayer(player.id);
+
     players = players.filter((entry) => entry.id !== player.id);
     onDeleted?.(player.id);
     render();
@@ -239,34 +246,36 @@ export function createPlayerController(deps: PlayerScreenDeps): PlayerController
     event.preventDefault();
     if (busy) return;
 
-    const name = nameInput.value.trim();
-    if (name.length < 1 || name.length > 20) {
-      setFormError('Bitte einen Namen mit 1–20 Zeichen eingeben.');
-      return;
-    }
-
     const color = colorName(selectedColorId);
     busy = true;
     setFormError(null);
 
-    void createPlayer(name, color)
-      .then(async () => {
-        busy = false;
-        hideForm();
-        await refresh();
-      })
-      .catch((thrown: unknown) => {
-        busy = false;
-        if (thrown instanceof ApiError && thrown.status === 409) {
+    void (async () => {
+      const outcome = await performCreatePlayer(
+        nameInput.value,
+        color,
+        createPlayer,
+      );
+      busy = false;
+      switch (outcome.kind) {
+        case 'ok':
+          hideForm();
+          await refresh();
+          return;
+        case 'invalid-name':
+          setFormError('Bitte einen Namen mit 1–20 Zeichen eingeben.');
+          return;
+        case 'name-taken':
           setFormError('Name bereits vergeben.');
           return;
-        }
-        if (thrown instanceof ApiError && thrown.status === 400) {
+        case 'invalid':
           setFormError('Ungültiger Name oder Farbe.');
           return;
-        }
-        setFormError('Anlegen fehlgeschlagen.');
-      });
+        case 'failed':
+          setFormError('Anlegen fehlgeschlagen.');
+          return;
+      }
+    })();
   });
 
   function show(nextPlayers: Player[]): void {
