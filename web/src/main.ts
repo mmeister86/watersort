@@ -8,12 +8,15 @@
 
 import './styles.css';
 
+import { registerSW } from 'virtual:pwa-register';
+
 import { listPlayers, type Player } from './api';
 import { resolveBoot } from './flow';
 import { createSyncCoordinator, mergeLevel } from './sync';
 import { createStorage, type PendingSyncEntry } from './storage';
 import { createCodeController } from './ui/codeScreen';
 import { createGameController, LOCAL_PLAYER_ID, type SolvedInfo } from './ui/gameScreen';
+import { createIosHint } from './ui/iosHint';
 import { createPlayerController } from './ui/playerScreen';
 import { createScreens } from './ui/screens';
 import { generate } from './worker/client';
@@ -29,6 +32,22 @@ const screens = createScreens(container, 'code');
 // Show the gate immediately so the app is never blank while the session probe
 // runs; a valid session swaps to the player picker as soon as it resolves.
 screens.show('code');
+
+// One-time iOS Safari hint; a no-op elsewhere and after it was dismissed.
+createIosHint({ storage }).maybeShow();
+
+// Service worker: autoUpdate takes new versions in the background. The plugin
+// would reload the page as soon as an update activates; skip that reload while
+// a level is open so a running game is never interrupted. The new version is
+// then used on the next launch.
+registerSW({
+  immediate: true,
+  onNeedReload() {
+    if (screens.current() !== 'game') {
+      globalThis.location.reload();
+    }
+  },
+});
 
 // Serializes every flush so a solved level, the boot probe and the `online`
 // event can never PUT the same queued entry twice.

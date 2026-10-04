@@ -199,6 +199,23 @@ describe('settings', () => {
   });
 });
 
+describe('iOS hint flag', () => {
+  it('defaults to not dismissed', () => {
+    const storage = createStorage(new MemoryStorage());
+    expect(storage.isIosHintDismissed()).toBe(false);
+  });
+
+  it('remembers a dismissal under the namespaced key', () => {
+    const backing = new MemoryStorage();
+    const storage = createStorage(backing);
+
+    storage.dismissIosHint();
+
+    expect(storage.isIosHintDismissed()).toBe(true);
+    expect(backing.data.get(`${STORAGE_PREFIX}iosHintDismissed`)).toBe('1');
+  });
+});
+
 describe('write failures', () => {
   it('surfaces quota errors instead of swallowing them', () => {
     const quotaStorage: StorageLike = {

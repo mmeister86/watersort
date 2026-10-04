@@ -24,6 +24,7 @@ import {
 import { createBoardView } from './board';
 import { keyboardAction, type KeyAction } from './input';
 import type { ScreenManager } from './screens';
+import { createWakeLock } from './wakeLock';
 
 /** Progress is stored under a fixed pseudo-id when playing without a session. */
 export const LOCAL_PLAYER_ID = 'local';
@@ -147,6 +148,8 @@ export function createGameController(deps: GameDeps): GameController {
   ];
 
   const view = createBoardView(boardElement);
+  // Best-effort: keeps the screen awake while a level is open.
+  const wakeLock = createWakeLock();
 
   let state: GameState | null = null;
   let selection: number | null = null;
@@ -170,6 +173,7 @@ export function createGameController(deps: GameDeps): GameController {
 
   function renderLoadError(error: unknown): void {
     console.error('Failed to generate level', error);
+    wakeLock.release();
     boardElement.replaceChildren();
     const message = document.createElement('p');
     message.className = 'board__placeholder';
@@ -215,6 +219,7 @@ export function createGameController(deps: GameDeps): GameController {
   }
 
   function completeLevel(level: number, report: boolean): void {
+    wakeLock.release();
     if (completeLevelElement !== null) {
       completeLevelElement.textContent = `Level ${level}`;
     }
@@ -251,6 +256,7 @@ export function createGameController(deps: GameDeps): GameController {
     locked = false;
     render();
     persist();
+    wakeLock.acquire();
 
     // A solved board can be restored after a reload that happened between the
     // winning move and "Weiter"; go straight back to the completion screen,
@@ -434,6 +440,7 @@ export function createGameController(deps: GameDeps): GameController {
 
   function stop(): void {
     started = false;
+    wakeLock.release();
     globalThis.removeEventListener('keydown', onKeyDown);
     boardElement.removeEventListener('pointerup', onPointerUp);
     boardElement.removeEventListener('click', onClick);

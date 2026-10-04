@@ -18,6 +18,7 @@ const KEYS = {
   player: (id: string): string => `${STORAGE_PREFIX}player:${id}`,
   pendingSync: `${STORAGE_PREFIX}pendingSync`,
   settings: `${STORAGE_PREFIX}settings`,
+  iosHintDismissed: `${STORAGE_PREFIX}iosHintDismissed`,
 } as const;
 
 /** The saved progress of one player. `version` is the generator version. */
@@ -64,6 +65,9 @@ export type AppStorage = {
   setPendingSync(entries: PendingSyncEntry[]): void;
   getSettings(): Settings;
   setSettings(settings: Settings): void;
+  /** Whether the one-time iOS "add to home screen" hint was dismissed. */
+  isIosHintDismissed(): boolean;
+  dismissIosHint(): void;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -231,6 +235,14 @@ export function createStorage(
 
     setSettings(settings: Settings): void {
       storage.setItem(KEYS.settings, JSON.stringify(settings));
+    },
+
+    isIosHintDismissed(): boolean {
+      return storage.getItem(KEYS.iosHintDismissed) === '1';
+    },
+
+    dismissIosHint(): void {
+      storage.setItem(KEYS.iosHintDismissed, '1');
     },
   };
 }

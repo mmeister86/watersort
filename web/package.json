@@ -7,5 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite-plugin-pwa": "^2.0.0"
   }
 }

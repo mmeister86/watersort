@@ -10,7 +10,8 @@
     ],
     "types": [
       "node",
-      "vite/client"
+      "vite/client",
+      "vite-plugin-pwa/vanillajs"
     ],
     "noEmit": true,
     "paths": {
