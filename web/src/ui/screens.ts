@@ -212,7 +212,8 @@ function createGameScreen(): HTMLElement {
 
   const symbols = button('Symbole');
   symbols.dataset.action = 'color-blind';
-  symbols.setAttribute('aria-label', 'Farbenblind-Modus');
+  // Keep the visible label ("Symbole") inside the accessible name.
+  symbols.setAttribute('aria-label', 'Symbole (Farbenblind-Modus)');
   symbols.setAttribute('aria-pressed', 'false');
 
   const switchPlayer = button('Spieler');
