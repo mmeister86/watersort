@@ -95,7 +95,7 @@ Exact test vectors (assert full param objects):
 - n=36: {colors:7, …20–35}
 - n=76: {colors:9, …30–50}
 - n=100 (sawtooth→B3 at 50): {colors:7, capacity:4, empty:2, hidden:false, minMoves:20, maxMoves:35}
-- n=150 (sawtooth→B3 at 50): {colors:7, capacity:4, empty:2, hidden:true, minMoves:20, maxMoves:35}
+- n=150 (sawtooth→B4 at 100): {colors:9, capacity:4, empty:2, hidden:true, minMoves:30, maxMoves:50}
 - n=200 (sawtooth→B4 at 100): {colors:9, capacity:4, empty:2, hidden:true, minMoves:30, maxMoves:50}
 - n=201: {colors:12, capacity:5, empty:2, hidden:true, minMoves:50, maxMoves:75}
 - n=400 (sawtooth→B5 at 200): {colors:11, capacity:4, empty:2, hidden:true, minMoves:40, maxMoves:60}
