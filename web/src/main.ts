@@ -11,7 +11,7 @@ import './styles.css';
 import { registerSW } from 'virtual:pwa-register';
 
 import { listPlayers, type Player } from './api';
-import { resolveBoot } from './flow';
+import { resolveBoot, shouldSyncProgress } from './flow';
 import { createSyncCoordinator, mergeLevel } from './sync';
 import { createStorage, type PendingSyncEntry } from './storage';
 import { createCodeController } from './ui/codeScreen';
@@ -55,6 +55,11 @@ const sync = createSyncCoordinator(storage);
 
 /** Reports one solve: queue it, then try to flush the whole queue. */
 async function reportSolved(info: SolvedInfo): Promise<void> {
+  // Offline/local play has no server-side player, so it must never enqueue a
+  // sync entry; `PUT /api/players/local/progress` could never succeed.
+  if (!shouldSyncProgress(info.playerId)) {
+    return;
+  }
   const entry: PendingSyncEntry = {
     playerId: info.playerId,
     level: info.level + 1,

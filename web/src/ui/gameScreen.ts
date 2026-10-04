@@ -30,7 +30,7 @@ import type { ScreenManager } from './screens';
 import { createWakeLock } from './wakeLock';
 
 /** Progress is stored under a fixed pseudo-id when playing without a session. */
-export const LOCAL_PLAYER_ID = 'local';
+export { LOCAL_PLAYER_ID } from '../flow';
 
 /** Pour transition duration; must match `.tube.is-pouring` in styles.css. */
 export const POUR_MS = 250;

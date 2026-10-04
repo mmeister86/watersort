@@ -14,7 +14,7 @@
 // The queue operations are injected with the sender and the storage, so the
 // tests can drive them with a fetch stub and an in-memory storage.
 
-import { updateProgress } from './api';
+import { ApiError, updateProgress } from './api';
 import type { AppStorage, PendingSyncEntry } from './storage';
 
 /** Sends one queued update; resolves with the server-merged player level. */
@@ -99,6 +99,10 @@ function removeConsumed(
  * lets later redundant entries for that player be dropped; a failed send
  * retains that entry and every entry after it and ends the flush.
  *
+ * An `ApiError` 404 is the one failure that does not block: the player no
+ * longer exists server-side (deleted on another device), so the poisoned entry
+ * is dropped and the flush continues with the rest of the queue.
+ *
  * Prefer {@link createSyncCoordinator} so overlapping triggers cannot run two
  * flushes at once.
  */
@@ -133,7 +137,15 @@ export async function flushPendingSync(
       consumed.push(entry);
       sent += 1;
       confirmed.set(entry.playerId, Math.max(known ?? 0, player.level));
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        // The player is gone on the server. Drop just this entry and keep
+        // flushing: it can never succeed, and leaving it at the head would
+        // wedge every later entry forever.
+        consumed.push(entry);
+        dropped += 1;
+        continue;
+      }
       // Offline or server error: keep this entry and everything after it. The
       // queue is retried on the next flush and later entries must not overtake
       // a failed earlier one, so stop here.

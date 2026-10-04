@@ -51,13 +51,14 @@ function jsonResponse(body: unknown, status = 200): Response {
 /** A fetch stub that records calls and answers with a merged player. */
 function recordFetch(
   calls: string[],
-  fail?: (url: string) => boolean,
+  fail?: (url: string) => number | undefined,
 ): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
   return async (input, init) => {
     const url = String(input);
     calls.push(`${init?.method ?? 'GET'} ${url}`);
-    if (fail?.(url) === true) {
-      return jsonResponse({ error: 'boom' }, 500);
+    const failStatus = fail?.(url);
+    if (failStatus !== undefined) {
+      return jsonResponse({ error: 'boom' }, failStatus);
     }
     const body = init?.body;
     const parsed: unknown =
@@ -129,7 +130,7 @@ describe('flushPendingSync', () => {
     const calls: string[] = [];
     vi.stubGlobal(
       'fetch',
-      recordFetch(calls, (url) => url.includes('/p3/')),
+      recordFetch(calls, (url) => (url.includes('/p3/') ? 500 : undefined)),
     );
     const storage = makeStorage([
       entry('p1', 2),
@@ -147,6 +148,51 @@ describe('flushPendingSync', () => {
       'PUT /api/players/p3/progress',
     ]);
     expect(storage.getPendingSync()).toEqual([entry('p3', 4), entry('p4', 5)]);
+  });
+
+  it('drops a 404 entry and keeps flushing the rest of the queue', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      recordFetch(calls, (url) =>
+        url.includes('/gone/') ? 404 : undefined,
+      ),
+    );
+    const storage = makeStorage([
+      entry('gone', 2),
+      entry('p1', 5),
+      entry('gone', 3),
+    ]);
+
+    const result = await flushPendingSync(storage);
+
+    // The deleted player's entries are dropped, not left at the head to wedge
+    // every later update for the real player behind them.
+    expect(result).toEqual({ sent: 1, dropped: 2, remaining: 0 });
+    expect(calls).toEqual([
+      'PUT /api/players/gone/progress',
+      'PUT /api/players/p1/progress',
+      'PUT /api/players/gone/progress',
+    ]);
+    expect(storage.getPendingSync()).toEqual([]);
+  });
+
+  it('still stops on a non-404 failure after dropping a 404 entry', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      recordFetch(calls, (url) => {
+        if (url.includes('/gone/')) return 404;
+        if (url.includes('/p2/')) return 500;
+        return undefined;
+      }),
+    );
+    const storage = makeStorage([entry('gone', 2), entry('p2', 4), entry('p3', 5)]);
+
+    const result = await flushPendingSync(storage);
+
+    expect(result).toEqual({ sent: 0, dropped: 1, remaining: 2 });
+    expect(storage.getPendingSync()).toEqual([entry('p2', 4), entry('p3', 5)]);
   });
 
   it('skips the network entirely when offline and keeps the queue', async () => {

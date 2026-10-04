@@ -31,6 +31,10 @@ ENV NODE_ENV=production \
 # which is one of the locations `server/src/index.ts` probes at startup.
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server/dist ./server
+# Explicit ESM marker for `node server/index.js`: server/package.json carries
+# `"type": "module"`, so the runtime does not depend on Node's module-syntax
+# auto-detection.
+COPY --from=build /app/server/package.json ./server/package.json
 COPY --from=build /app/web/dist ./public
 
 # The Coolify volume mounts at /data. Create it owned by `node` so a fresh

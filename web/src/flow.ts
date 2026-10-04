@@ -7,6 +7,19 @@
 
 import { ApiError, type Player } from './api';
 
+/** Progress is stored under a fixed pseudo-id when playing without a session. */
+export const LOCAL_PLAYER_ID = 'local';
+
+/**
+ * Whether a solve for `playerId` should be queued for server sync. The offline
+ * pseudo-player ({@link LOCAL_PLAYER_ID}) exists only in localStorage, so a
+ * solve under it must never enqueue — `PUT /api/players/local/progress` would
+ * 404 and (before the 404 handling) wedge the whole queue.
+ */
+export function shouldSyncProgress(playerId: string): boolean {
+  return playerId !== LOCAL_PLAYER_ID;
+}
+
 /** Why an API call failed, as far as the UI cares. */
 export type ApiFailure = 'unauthorized' | 'unreachable';
 

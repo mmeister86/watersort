@@ -10,10 +10,12 @@ import {
 } from '../src/api';
 import {
   classifyApiFailure,
+  LOCAL_PLAYER_ID,
   performCreatePlayer,
   performDeletePlayer,
   performLogin,
   resolveBoot,
+  shouldSyncProgress,
   validatePlayerName,
 } from '../src/flow';
 
@@ -62,6 +64,17 @@ describe('classifyApiFailure', () => {
       'unreachable',
     );
     expect(classifyApiFailure(new Error('x'))).toBe('unreachable');
+  });
+});
+
+describe('shouldSyncProgress', () => {
+  it('never syncs the offline pseudo-player', () => {
+    expect(shouldSyncProgress(LOCAL_PLAYER_ID)).toBe(false);
+  });
+
+  it('syncs every real player, including one named like the pseudo-id only in part', () => {
+    expect(shouldSyncProgress('p_k3x9')).toBe(true);
+    expect(shouldSyncProgress('local-two')).toBe(true);
   });
 });
 
