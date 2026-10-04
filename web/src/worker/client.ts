@@ -31,6 +31,14 @@ function take(kind: Pending['kind']): Pending | undefined {
   return pending.splice(index, 1)[0];
 }
 
+/** Rejects every in-flight request; used when the worker can no longer answer. */
+function rejectAll(reason: unknown): void {
+  const entries = pending.splice(0);
+  for (const entry of entries) {
+    entry.reject(reason instanceof Error ? reason : new Error(String(reason)));
+  }
+}
+
 function onMessage(event: MessageEvent<WorkerResponse>): void {
   const response = event.data;
 
@@ -54,6 +62,28 @@ function onMessage(event: MessageEvent<WorkerResponse>): void {
   entry?.reject(new Error(response.message));
 }
 
+/**
+ * A worker `error` event means the worker can no longer serve requests (for
+ * example a failed module load or an uncaught exception). Drop the singleton so
+ * a later call can start a fresh worker, and reject everything in flight
+ * instead of leaving those promises pending forever.
+ */
+function onError(event: ErrorEvent): void {
+  const failed = worker;
+  worker = null;
+  failed?.terminate();
+  rejectAll(new Error(`Generation worker error: ${event.message}`));
+}
+
+/**
+ * Raised when a message from the worker cannot be deserialized. The worker is
+ * still alive, but without correlation ids the affected response is lost, so
+ * reject the pending queue rather than hang.
+ */
+function onMessageError(): void {
+  rejectAll(new Error('Generation worker sent an unreadable message'));
+}
+
 let worker: Worker | null = null;
 
 function getWorker(): Worker {
@@ -62,6 +92,8 @@ function getWorker(): Worker {
       type: 'module',
     });
     worker.addEventListener('message', onMessage);
+    worker.addEventListener('error', onError);
+    worker.addEventListener('messageerror', onMessageError);
   }
   return worker;
 }
@@ -94,7 +126,5 @@ export function terminate(): void {
   }
   worker.terminate();
   worker = null;
-  for (const entry of pending.splice(0)) {
-    entry.reject(new Error('Generation worker terminated'));
-  }
+  rejectAll(new Error('Generation worker terminated'));
 }

@@ -371,6 +371,7 @@ body {
   box-shadow: inset 0 6px 12px rgb(0 0 0 / 35%);
   overflow: hidden;
   cursor: pointer;
+  transform-origin: center bottom;
   transition:
     transform 150ms ease,
     box-shadow 150ms ease;
@@ -395,6 +396,20 @@ body {
 .tube.is-legal {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Pour animation: the moving classes are added for ~250 ms by the controller
+   and removed afterwards, so the transition back is automatic. Under
+   prefers-reduced-motion the global rule shortens the transition to ~0 and the
+   controller resolves the animation without waiting. */
+.tube.is-pouring {
+  transform: translateY(-0.3rem) rotate(-3deg);
+  transition: transform 250ms ease;
+}
+
+.tube.is-receiving {
+  transform: translateY(0.15rem) scale(1.03);
+  transition: transform 250ms ease;
 }
 
 .tube.is-animating {
