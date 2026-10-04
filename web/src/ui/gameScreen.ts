@@ -16,29 +16,45 @@ import {
   move as applyGameMove,
   restart as restartGame,
   startLevel,
+  statsDelta as computeStatsDelta,
   undo as undoGame,
   type GameState,
+  type StatsDelta,
 } from '../game/state';
 import { createBoardView } from './board';
 import { keyboardAction, type KeyAction } from './input';
 import type { ScreenManager } from './screens';
 
-/** Progress is stored under a fixed pseudo-id until the server (Task 9/10). */
+/** Progress is stored under a fixed pseudo-id when playing without a session. */
 export const LOCAL_PLAYER_ID = 'local';
 
 /** Pour transition duration; must match `.tube.is-pouring` in styles.css. */
 export const POUR_MS = 250;
+
+/** What the caller learns when a level is won (before „Weiter"). */
+export type SolvedInfo = {
+  playerId: string;
+  /** The level that was just completed. */
+  level: number;
+  statsDelta: StatsDelta;
+};
 
 export type GameDeps = {
   screens: ScreenManager;
   storage: AppStorage;
   playerId: string;
   generate: (n: number) => Promise<Level>;
+  /** Called once per freshly won level, not on a restored solved board. */
+  onSolved?: (info: SolvedInfo) => void;
+  /** Called when the player wants to return to the player picker. */
+  onSwitchPlayer?: () => void;
 };
 
 export type GameController = {
   /** Loads (and restores) the level from storage, then renders it. */
-  start(): Promise<void>;
+  start(level?: number): Promise<void>;
+  /** Points the controller at another player; takes effect on the next start. */
+  setPlayer(playerId: string): void;
   /** Detaches the global listeners; used when leaving the game screen. */
   stop(): void;
 };
@@ -113,7 +129,8 @@ function requireElement<T extends Element>(root: ParentNode, selector: string): 
 
 /** Builds the controller and wires the game screen's buttons immediately. */
 export function createGameController(deps: GameDeps): GameController {
-  const { screens, storage, playerId, generate } = deps;
+  const { screens, storage, generate, onSolved, onSwitchPlayer } = deps;
+  let playerId = deps.playerId;
 
   const gameScreen = screens.screens.game;
   const completeScreen = screens.screens.complete;
@@ -124,6 +141,10 @@ export function createGameController(deps: GameDeps): GameController {
   const restartButton = gameScreen.querySelector<HTMLButtonElement>('[data-action="restart"]');
   const nextButton = completeScreen.querySelector<HTMLButtonElement>('[data-action="next"]');
   const completeLevelElement = completeScreen.querySelector<HTMLElement>('[data-complete-level]');
+  const switchButtons = [
+    ...gameScreen.querySelectorAll<HTMLButtonElement>('[data-action="switch-player"]'),
+    ...completeScreen.querySelectorAll<HTMLButtonElement>('[data-action="switch-player"]'),
+  ];
 
   const view = createBoardView(boardElement);
 
@@ -193,11 +214,18 @@ export function createGameController(deps: GameDeps): GameController {
     to.classList.remove('is-receiving');
   }
 
-  function completeLevel(level: number): void {
+  function completeLevel(level: number, report: boolean): void {
     if (completeLevelElement !== null) {
       completeLevelElement.textContent = `Level ${level}`;
     }
     screens.show('complete');
+    if (report && state !== null) {
+      onSolved?.({
+        playerId,
+        level,
+        statsDelta: computeStatsDelta(state),
+      });
+    }
   }
 
   async function load(n: number, progress: PlayerProgress | null): Promise<void> {
@@ -225,9 +253,10 @@ export function createGameController(deps: GameDeps): GameController {
     persist();
 
     // A solved board can be restored after a reload that happened between the
-    // winning move and "Weiter"; go straight back to the completion screen.
+    // winning move and "Weiter"; go straight back to the completion screen,
+    // but do not report the solve a second time.
     if (isSolved(loaded)) {
-      completeLevel(loaded.level.n);
+      completeLevel(loaded.level.n, false);
     }
   }
 
@@ -243,7 +272,7 @@ export function createGameController(deps: GameDeps): GameController {
     locked = false;
 
     if (isSolved(next)) {
-      completeLevel(next.level.n);
+      completeLevel(next.level.n, true);
     }
   }
 
@@ -380,8 +409,13 @@ export function createGameController(deps: GameDeps): GameController {
   nextButton?.addEventListener('click', () => {
     void doNext();
   });
+  for (const switchButton of switchButtons) {
+    switchButton.addEventListener('click', () => {
+      onSwitchPlayer?.();
+    });
+  }
 
-  async function start(): Promise<void> {
+  async function start(level?: number): Promise<void> {
     if (!started) {
       started = true;
       globalThis.addEventListener('keydown', onKeyDown);
@@ -390,8 +424,12 @@ export function createGameController(deps: GameDeps): GameController {
     }
 
     const saved = storage.getPlayerProgress(playerId);
-    const n = saved?.level ?? 1;
+    const n = level ?? saved?.level ?? 1;
     await load(n, saved !== null && saved.level === n ? saved : null);
+  }
+
+  function setPlayer(nextPlayerId: string): void {
+    playerId = nextPlayerId;
   }
 
   function stop(): void {
@@ -401,5 +439,5 @@ export function createGameController(deps: GameDeps): GameController {
     boardElement.removeEventListener('click', onClick);
   }
 
-  return { start, stop };
+  return { start, setPlayer, stop };
 }

@@ -144,6 +144,39 @@ describe('pending sync', () => {
   });
 });
 
+describe('removePlayer', () => {
+  it('removes progress, queued entries and the active marker', () => {
+    const backing = new MemoryStorage();
+    const storage = createStorage(backing);
+    storage.setActivePlayer('p1');
+    storage.setPlayerProgress('p1', { level: 3 });
+    storage.setPlayerProgress('p2', { level: 5 });
+    storage.setPendingSync([
+      { playerId: 'p1', level: 4, statsDelta: { solved: 1, moves: 1, undos: 0 } },
+      { playerId: 'p2', level: 6, statsDelta: { solved: 1, moves: 1, undos: 0 } },
+    ]);
+
+    storage.removePlayer('p1');
+
+    expect(storage.getPlayerProgress('p1')).toBeNull();
+    expect(storage.getActivePlayer()).toBeNull();
+    expect(storage.getPlayerProgress('p2')).toEqual({
+      level: 5,
+      version: GENERATOR_VERSION,
+    });
+    expect(storage.getPendingSync()).toEqual([
+      { playerId: 'p2', level: 6, statsDelta: { solved: 1, moves: 1, undos: 0 } },
+    ]);
+  });
+
+  it('leaves the active marker alone when another player is active', () => {
+    const storage = createStorage(new MemoryStorage());
+    storage.setActivePlayer('p2');
+    storage.removePlayer('p1');
+    expect(storage.getActivePlayer()).toBe('p2');
+  });
+});
+
 describe('settings', () => {
   it('defaults to colorBlind disabled', () => {
     const storage = createStorage(new MemoryStorage());

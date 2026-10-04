@@ -1,8 +1,8 @@
 // Screen shells for the Water Sort app plus the tiny screen-switching state.
 //
-// Task 6 only builds the structure. Tasks 8 and 10 fill in the behavior:
-// the game screen and its controls are inert here, and the family-code /
-// player-picker screens are placeholders.
+// This module only builds the static DOM and toggles visibility. The behavior
+// lives in the per-screen controllers (`codeScreen`, `playerScreen`,
+// `gameScreen`), which query these `data-*` hooks.
 
 /** The four top-level screens, in flow order. */
 export type ScreenId = 'code' | 'player-picker' | 'game' | 'complete';
@@ -84,15 +84,21 @@ function createCodeScreen(): HTMLElement {
   error.dataset.error = 'code';
   form.append(error);
 
+  // Shown only when the server cannot be reached; lets the player continue
+  // against the local board and sync later.
+  const notice = el('p', 'form__notice', 'Server nicht erreichbar.');
+  notice.hidden = true;
+  notice.dataset.notice = 'code';
+  form.append(notice);
+
+  const offline = button('Offline weiter spielen');
+  offline.dataset.action = 'offline';
+  offline.hidden = true;
+  form.append(offline);
+
   const submit = button('Los', 'button button--primary');
   submit.type = 'submit';
   form.append(submit);
-
-  // Inert scaffold: swallow the submit so the placeholder never reloads the
-  // page. Task 10 replaces this with the real session request.
-  form.addEventListener('submit', (event) => {
-    event.preventDefault();
-  });
 
   panel.append(form);
   screen.append(panel);
@@ -111,8 +117,55 @@ function createPlayerScreen(): HTMLElement {
   list.append(el('li', 'player-list__empty', 'Noch keine Spieler vorhanden.'));
   panel.append(list);
 
-  // Inert placeholder: Task 10 wires player creation and selection.
-  panel.append(button('+ Neuer Spieler'));
+  const notice = el('p', 'form__error');
+  notice.setAttribute('role', 'alert');
+  notice.hidden = true;
+  notice.dataset.notice = 'player';
+  panel.append(notice);
+
+  const newPlayer = button('+ Neuer Spieler');
+  newPlayer.dataset.action = 'new-player';
+  panel.append(newPlayer);
+
+  const form = el('form', 'form form--new-player');
+  form.noValidate = true;
+  form.dataset.form = 'player';
+  form.hidden = true;
+
+  const nameField = el('label', 'field');
+  nameField.append(el('span', 'field__label', 'Name'));
+  const nameInput = el('input', 'input');
+  nameInput.type = 'text';
+  nameInput.name = 'name';
+  nameInput.maxLength = 20;
+  nameInput.autocomplete = 'off';
+  nameInput.placeholder = 'Name';
+  nameInput.setAttribute('aria-label', 'Spielername');
+  nameInput.dataset.input = 'player-name';
+  nameField.append(nameInput);
+  form.append(nameField);
+
+  const colors = el('div', 'color-picker');
+  colors.dataset.colors = '';
+  colors.setAttribute('role', 'radiogroup');
+  colors.setAttribute('aria-label', 'Farbe');
+  form.append(colors);
+
+  const formError = el('p', 'form__error');
+  formError.setAttribute('role', 'alert');
+  formError.hidden = true;
+  formError.dataset.error = 'player';
+  form.append(formError);
+
+  const actions = el('div', 'form__actions');
+  const cancel = button('Abbrechen');
+  cancel.dataset.action = 'cancel-player';
+  const create = button('Anlegen', 'button button--primary');
+  create.type = 'submit';
+  actions.append(cancel, create);
+  form.append(actions);
+
+  panel.append(form);
 
   screen.append(panel);
   return screen;
@@ -150,7 +203,10 @@ function createGameScreen(): HTMLElement {
   const hint = button('Tipp');
   hint.dataset.action = 'hint';
 
-  controls.append(undo, restart, hint);
+  const switchPlayer = button('Spieler');
+  switchPlayer.dataset.action = 'switch-player';
+
+  controls.append(undo, restart, hint, switchPlayer);
   game.append(controls);
 
   screen.append(game);
@@ -180,6 +236,10 @@ function createCompleteScreen(): HTMLElement {
   const next = button('Weiter', 'button button--primary');
   next.dataset.action = 'next';
   panel.append(next);
+
+  const switchPlayer = button('Spieler wechseln');
+  switchPlayer.dataset.action = 'switch-player';
+  panel.append(switchPlayer);
 
   screen.append(panel);
   return screen;

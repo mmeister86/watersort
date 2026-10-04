@@ -19,14 +19,28 @@ if (initialBuild.status !== 0) {
   process.exit(initialBuild.status ?? 1);
 }
 
+// Dev-only convenience: the server validates that both secrets are set and
+// exits otherwise. Bare `npm run dev` has no .env, so fill in throwaway
+// defaults only when the developer left the variable unset. An explicitly set
+// (even empty) value is passed through untouched, and the production entry
+// point (`node dist/index.js`) never goes through this file, so it stays
+// fail-closed.
+const serverEnv = {
+  ...process.env,
+  FAMILY_CODE: process.env.FAMILY_CODE ?? 'dev',
+  COOKIE_SECRET: process.env.COOKIE_SECRET ?? 'dev-secret',
+};
+
 const children = [
   spawn(process.execPath, [viteBin, 'build', '--watch'], {
     cwd: serverDir,
     stdio: 'inherit',
+    env: serverEnv,
   }),
   spawn(process.execPath, ['--watch', distEntry], {
     cwd: serverDir,
     stdio: 'inherit',
+    env: serverEnv,
   }),
 ];
 

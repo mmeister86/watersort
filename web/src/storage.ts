@@ -58,6 +58,8 @@ export type AppStorage = {
   clearActivePlayer(): void;
   getPlayerProgress(id: string): PlayerProgress | null;
   setPlayerProgress(id: string, progress: PlayerProgressInput): void;
+  /** Removes a player's progress, queued sync and active marker. */
+  removePlayer(id: string): void;
   getPendingSync(): PendingSyncEntry[];
   setPendingSync(entries: PendingSyncEntry[]): void;
   getSettings(): Settings;
@@ -197,6 +199,22 @@ export function createStorage(
         version: GENERATOR_VERSION,
       };
       storage.setItem(KEYS.player(id), JSON.stringify(stored));
+    },
+
+    removePlayer(id: string): void {
+      storage.removeItem(KEYS.player(id));
+      const pending = readJson(storage, KEYS.pendingSync, isPendingSync);
+      if (pending !== null) {
+        const remaining = pending.filter((entry) => entry.playerId !== id);
+        if (remaining.length === 0) {
+          storage.removeItem(KEYS.pendingSync);
+        } else {
+          storage.setItem(KEYS.pendingSync, JSON.stringify(remaining));
+        }
+      }
+      if (storage.getItem(KEYS.activePlayer) === id) {
+        storage.removeItem(KEYS.activePlayer);
+      }
     },
 
     getPendingSync(): PendingSyncEntry[] {

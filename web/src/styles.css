@@ -61,6 +61,13 @@
   box-sizing: border-box;
 }
 
+/* Author `display` declarations would otherwise beat the user-agent rule for
+   the `hidden` attribute (used to toggle the offline button, the new-player
+   form and the message slots). */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   height: 100%;
@@ -268,12 +275,83 @@ body {
   text-align: left;
 }
 
+.player-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.player-row .player {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.player__name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player__level {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.player__remove {
+  flex: 0 0 auto;
+  min-height: auto;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+}
+
 .player__dot {
   flex: 0 0 auto;
   width: 1.1rem;
   height: 1.1rem;
   border-radius: 50%;
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 25%);
+}
+
+.color-picker {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.4rem;
+}
+
+.color-swatch {
+  aspect-ratio: 1;
+  width: 100%;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 25%);
+}
+
+.color-swatch.is-selected {
+  border-color: var(--text);
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
+}
+
+.color-swatch:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.form__notice {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 
 /* --------------------------------------------------------------------------
