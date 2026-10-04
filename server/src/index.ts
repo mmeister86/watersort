@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { serve } from '@hono/node-server';
 
-import { createApp } from './app';
+import { createApp, validateAppEnv } from './app';
 import { Store, probeDataDir } from './store';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -12,11 +12,11 @@ const dataDir = process.env.DATA_DIR ?? './data';
 const familyCode = process.env.FAMILY_CODE ?? '';
 const cookieSecret = process.env.COOKIE_SECRET ?? '';
 
-if (familyCode === '') {
-  console.warn('WARNING: FAMILY_CODE is empty; the login code is not protected.');
-}
-if (cookieSecret === '') {
-  console.warn('WARNING: COOKIE_SECRET is empty; session cookies are not secure.');
+// Fail closed: without both secrets the family-code gate is meaningless.
+const envError = validateAppEnv({ familyCode, cookieSecret });
+if (envError !== undefined) {
+  console.error(`FATAL: ${envError}`);
+  process.exit(1);
 }
 
 // Fail loudly when the data volume is not writable, before serving anything.

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { generateSignedCookie } from 'hono/cookie';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createApp } from '../src/app';
+import { createApp, validateAppEnv } from '../src/app';
 import { Store, type Player, type PlayerStore } from '../src/store';
 
 const SECRET = 'secret123';
@@ -126,6 +126,47 @@ describe('health and session', () => {
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(400);
+  });
+
+  it('rejects an empty code for a configured app', async () => {
+    const { app } = setup();
+    const res = await app.request('/api/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: '' }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects an empty code even when FAMILY_CODE is unset', async () => {
+    const store = new Store({ dataDir: makeTempDir() });
+    const app = createApp(store, { familyCode: '', cookieSecret: SECRET });
+    const res = await app.request('/api/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: '' }),
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('startup env validation', () => {
+  it('returns an error for a missing family code', () => {
+    expect(validateAppEnv({ familyCode: '', cookieSecret: 'x' })).toMatch(
+      /FAMILY_CODE/,
+    );
+  });
+
+  it('returns an error for a missing cookie secret', () => {
+    expect(validateAppEnv({ familyCode: 'x', cookieSecret: '' })).toMatch(
+      /COOKIE_SECRET/,
+    );
+  });
+
+  it('passes when both secrets are set', () => {
+    expect(
+      validateAppEnv({ familyCode: 'x', cookieSecret: 'y' }),
+    ).toBeUndefined();
   });
 });
 

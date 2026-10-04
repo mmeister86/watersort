@@ -21,6 +21,21 @@ export type AppEnv = {
   staticDir?: string;
 };
 
+/**
+ * Validates the auth env. Returns a human-readable error when a required
+ * secret is missing, else `undefined`. The process entry point turns this into
+ * a hard exit; keeping it pure makes it testable without exiting.
+ */
+export function validateAppEnv(env: AppEnv): string | undefined {
+  if (env.familyCode === '') {
+    return 'FAMILY_CODE must be set and non-empty';
+  }
+  if (env.cookieSecret === '') {
+    return 'COOKIE_SECRET must be set and non-empty';
+  }
+  return undefined;
+}
+
 const COOKIE_NAME = 'ws_session';
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 
@@ -141,7 +156,8 @@ export function createApp(store: PlayerStore, env: AppEnv): Hono {
     if (typeof code !== 'string') {
       return c.json({ error: 'invalid' }, 400);
     }
-    if (!safeEqual(code, env.familyCode)) {
+    // Never mint a session from an empty code, even if FAMILY_CODE is unset.
+    if (code.length === 0 || !safeEqual(code, env.familyCode)) {
       return c.json({ error: 'unauthorized' }, 401);
     }
     await setSignedCookie(
