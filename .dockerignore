@@ -8,3 +8,6 @@ node_modules
 data
 .DS_Store
 *.tmp
+.env
+.env.*
+*.env

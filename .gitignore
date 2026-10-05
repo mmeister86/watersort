@@ -8,3 +8,5 @@ shared/dist/
 .superpowers/
 data/
 *.tmp
+.env
+.env.*
