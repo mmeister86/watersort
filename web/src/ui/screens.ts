@@ -4,6 +4,8 @@
 // lives in the per-screen controllers (`codeScreen`, `playerScreen`,
 // `gameScreen`), which query these `data-*` hooks.
 
+import { icon, type IconName } from './icons';
+
 /** The four top-level screens, in flow order. */
 export type ScreenId = 'code' | 'player-picker' | 'game' | 'complete';
 
@@ -44,22 +46,70 @@ function button(label: string, className = 'button'): HTMLButtonElement {
   return node;
 }
 
-function hudStat(label: string, value: string, key: string): HTMLElement {
-  const wrap = el('div', 'hud__stat');
-  wrap.append(el('span', 'hud__label', label));
+/** A button with a leading icon and a visible text label. */
+function iconButton(
+  label: string,
+  name: IconName,
+  className = 'button',
+): HTMLButtonElement {
+  const node = el('button', className);
+  node.type = 'button';
+  node.append(icon(name), el('span', 'button__label', label));
+  return node;
+}
+
+/** A compact icon-only button; the label stays available as tooltip and name. */
+function toolButton(label: string, name: IconName): HTMLButtonElement {
+  const node = el('button', 'tool');
+  node.type = 'button';
+  node.title = label;
+  node.setAttribute('aria-label', label);
+  node.append(icon(name));
+  return node;
+}
+
+/** Three small decorative tubes used as the app's mark on the entry screens. */
+function brandMark(): HTMLElement {
+  const mark = el('div', 'brand-mark');
+  mark.setAttribute('aria-hidden', 'true');
+  const fills: readonly (readonly number[])[] = [
+    [2, 8, 10],
+    [1, 7, 4, 5],
+    [3, 4],
+  ];
+  for (const colors of fills) {
+    const tube = el('span', 'brand-mark__tube');
+    for (const color of colors) {
+      const layer = el('span', 'brand-mark__layer');
+      layer.dataset.color = String(color);
+      tube.append(layer);
+    }
+    mark.append(tube);
+  }
+  return mark;
+}
+
+function hudStat(
+  label: string,
+  value: string,
+  key: string,
+  className: string,
+): HTMLElement {
+  const wrap = el('div', `hud__stat ${className}`);
   const valueNode = el('span', 'hud__value', value);
   valueNode.dataset.hud = key;
-  wrap.append(valueNode);
+  wrap.append(el('span', 'hud__label', label), valueNode);
   return wrap;
 }
 
 function createCodeScreen(): HTMLElement {
   const screen = el('section', 'screen screen--code');
 
-  const panel = el('div', 'panel');
-  panel.append(el('h1', 'title', 'Water Sort'));
+  const panel = el('div', 'panel panel--brand');
+  panel.append(brandMark());
+  panel.append(el('h1', 'title title--brand', 'Water Sort'));
   panel.append(
-    el('p', 'subtitle', 'Bitte den Familien-Code eingeben.'),
+    el('p', 'subtitle', 'Gib den Familien-Code ein, um loszulegen.'),
   );
 
   const form = el('form', 'form');
@@ -123,7 +173,7 @@ function createPlayerScreen(): HTMLElement {
   notice.dataset.notice = 'player';
   panel.append(notice);
 
-  const newPlayer = button('+ Neuer Spieler');
+  const newPlayer = button('Neuer Spieler', 'button button--dashed');
   newPlayer.dataset.action = 'new-player';
   panel.append(newPlayer);
 
@@ -177,8 +227,17 @@ function createGameScreen(): HTMLElement {
   const game = el('div', 'game');
 
   const hud = el('header', 'hud');
-  hud.append(hudStat('Level', '–', 'level'));
-  hud.append(hudStat('Züge', '0', 'moves'));
+  hud.append(hudStat('Level', '–', 'level', 'hud__stat--level'));
+  hud.append(hudStat('Züge', '0', 'moves', 'hud__stat--moves'));
+
+  const tools = el('div', 'hud__tools');
+  const symbols = toolButton('Symbole (Farbenblind-Modus)', 'symbols');
+  symbols.dataset.action = 'color-blind';
+  symbols.setAttribute('aria-pressed', 'false');
+  const switchPlayer = toolButton('Spieler wechseln', 'player');
+  switchPlayer.dataset.action = 'switch-player';
+  tools.append(symbols, switchPlayer);
+  hud.append(tools);
   game.append(hud);
 
   const boardWrap = el('div', 'board-wrap');
@@ -199,27 +258,18 @@ function createGameScreen(): HTMLElement {
 
   const controls = el('div', 'controls');
 
-  const undo = button('Zurück');
+  const undo = iconButton('Zurück', 'undo', 'button button--control');
   undo.dataset.action = 'undo';
   undo.setAttribute('aria-keyshortcuts', 'Z');
 
-  const restart = button('Neustart');
+  const restart = iconButton('Neustart', 'restart', 'button button--control');
   restart.dataset.action = 'restart';
   restart.setAttribute('aria-keyshortcuts', 'R');
 
-  const hint = button('Tipp');
+  const hint = iconButton('Tipp', 'hint', 'button button--control button--hint');
   hint.dataset.action = 'hint';
 
-  const symbols = button('Symbole');
-  symbols.dataset.action = 'color-blind';
-  // Keep the visible label ("Symbole") inside the accessible name.
-  symbols.setAttribute('aria-label', 'Symbole (Farbenblind-Modus)');
-  symbols.setAttribute('aria-pressed', 'false');
-
-  const switchPlayer = button('Spieler');
-  switchPlayer.dataset.action = 'switch-player';
-
-  controls.append(undo, restart, hint, symbols, switchPlayer);
+  controls.append(undo, restart, hint);
   game.append(controls);
 
   screen.append(game);
@@ -229,14 +279,14 @@ function createGameScreen(): HTMLElement {
 function createCompleteScreen(): HTMLElement {
   const screen = el('section', 'screen screen--complete');
 
-  const panel = el('div', 'panel');
-  panel.append(el('h1', 'title', 'Level geschafft!'));
+  const panel = el('div', 'panel panel--complete');
+  panel.append(el('h1', 'title title--win', 'Geschafft!'));
 
   const level = el('p', 'subtitle', 'Level –');
   level.dataset.completeLevel = '';
   panel.append(level);
 
-  // Stars are a placeholder until Task 13 fills them from the move count.
+  // Filled from the move count by the game controller.
   const stars = el('div', 'stars');
   stars.dataset.stars = '';
   stars.setAttribute('role', 'img');
@@ -250,7 +300,7 @@ function createCompleteScreen(): HTMLElement {
   next.dataset.action = 'next';
   panel.append(next);
 
-  const switchPlayer = button('Spieler wechseln');
+  const switchPlayer = button('Spieler wechseln', 'button button--quiet');
   switchPlayer.dataset.action = 'switch-player';
   panel.append(switchPlayer);
 

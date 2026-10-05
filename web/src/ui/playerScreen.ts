@@ -17,6 +17,7 @@ import {
   performDeletePlayer,
 } from '../flow';
 import type { AppStorage } from '../storage';
+import { icon } from './icons';
 import type { ScreenManager } from './screens';
 
 /** The 14 selectable player colors, in palette order. */
@@ -174,6 +175,7 @@ export function createPlayerController(deps: PlayerScreenDeps): PlayerController
       const colorId = COLOR_ID_BY_NAME.get(player.color);
       if (colorId !== undefined) {
         dot.style.background = colorStyle(colorId);
+        select.style.setProperty('--player-color', colorStyle(colorId));
       }
       select.append(dot);
 
@@ -194,8 +196,9 @@ export function createPlayerController(deps: PlayerScreenDeps): PlayerController
 
       const remove = document.createElement('button');
       remove.type = 'button';
-      remove.className = 'button player__remove';
-      remove.textContent = 'Entfernen';
+      remove.className = 'tool player__remove';
+      remove.title = 'Entfernen';
+      remove.append(icon('remove'));
       remove.setAttribute('aria-label', `${player.name} entfernen`);
       remove.addEventListener('click', () => {
         void removePlayer(player);

@@ -32,9 +32,9 @@ export default defineConfig({
         lang: 'de',
         display: 'standalone',
         orientation: 'any',
-        // Mirrors `--bg` in web/src/styles.css and the theme-color meta tag.
-        theme_color: '#0b1120',
-        background_color: '#0b1120',
+        // Mirrors `--deep` in web/src/styles.css and the theme-color meta tag.
+        theme_color: '#072634',
+        background_color: '#072634',
         start_url: '/',
         scope: '/',
         icons: [

@@ -20,16 +20,16 @@ import { deflateSync } from 'node:zlib';
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
-// Palette mirrored from web/src/styles.css (`--bg`, `--tube-bg`,
-// `--tube-border` and colors 3, 4, 1). Keep in sync when the theme changes.
-const BACKGROUND = [11, 17, 32];
-const TUBE_BORDER = [75, 98, 140];
-const TUBE_BG = [13, 24, 48];
+// Palette mirrored from web/src/styles.css (`--deep`, the tube glass and
+// colors 3, 4, 1). Keep in sync when the theme changes.
+const BACKGROUND = [7, 38, 52];
+const TUBE_BORDER = [150, 196, 208];
+const TUBE_BG = [16, 56, 72];
 /** Bottom to top, matching how a level stacks units in a tube. */
 const BANDS = [
-  [34, 197, 94], // color-3 grün
-  [250, 204, 21], // color-4 gelb
-  [239, 68, 68], // color-1 rot
+  [54, 196, 90], // color-3 grün
+  [255, 212, 59], // color-4 gelb
+  [236, 58, 76], // color-1 rot
 ];
 
 /** Supersampling factor per axis; 4 gives 16 samples per output pixel. */
