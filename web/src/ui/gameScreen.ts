@@ -32,8 +32,21 @@ import { createWakeLock } from './wakeLock';
 /** Progress is stored under a fixed pseudo-id when playing without a session. */
 export { LOCAL_PLAYER_ID } from '../flow';
 
-/** Pour transition duration; must match `.tube.is-pouring` in styles.css. */
-export const POUR_MS = 250;
+/**
+ * Pour animation timing in ms: fly over and tilt, liquid flows, tilt back.
+ * `POUR_FLOW_MS` must match the `.unit` height transition in styles.css.
+ */
+export const POUR_TILT_MS = 300;
+export const POUR_FLOW_MS = 340;
+export const POUR_RETURN_MS = 260;
+/** Total duration of one pour animation. */
+export const POUR_MS = POUR_TILT_MS + POUR_FLOW_MS + POUR_RETURN_MS;
+
+/** How long the cork gets to pop on the last tube before the win screen. */
+export const WIN_DELAY_MS = 650;
+
+/** How far the pouring tube tilts, in degrees. */
+const POUR_ANGLE = 74;
 
 /** How long the hint highlight stays on the recommended tubes. */
 export const HINT_MS = 2000;
@@ -241,24 +254,114 @@ export function createGameController(deps: GameDeps): GameController {
     });
   }
 
+  /**
+   * Plays the pour from tube `from` into tube `to`: the source flies over the
+   * target and tilts, a stream of `color` runs down while `apply` re-renders
+   * the new state (the liquid levels animate via CSS), then the source tilts
+   * back. Under reduced motion `apply` runs at once with no animation.
+   */
   async function animatePour(
-    from: HTMLButtonElement | undefined,
-    to: HTMLButtonElement | undefined,
+    from: number,
+    to: number,
+    color: number,
+    apply: () => void,
   ): Promise<void> {
-    if (from === undefined || to === undefined || prefersReducedMotion()) {
+    const tubes = view.tubes();
+    const source = tubes[from];
+    const target = tubes[to];
+    if (
+      source === undefined ||
+      target === undefined ||
+      prefersReducedMotion() ||
+      typeof source.animate !== 'function'
+    ) {
+      apply();
       return;
     }
-    // The board was just rebuilt, so read layout once to commit each button's
-    // base style before the animating classes flip `transform`. Without this
-    // forced reflow the browser only ever sees the post-class style and skips
-    // the transition entirely (the tube would snap, not pour).
-    void from.offsetWidth;
-    void to.offsetWidth;
-    from.classList.add('is-pouring');
-    to.classList.add('is-receiving');
-    await wait(POUR_MS);
-    from.classList.remove('is-pouring');
-    to.classList.remove('is-receiving');
+
+    const { unit } = view.metrics();
+    const width = source.offsetWidth;
+    // Untransformed positions relative to the board (offsetParent).
+    const sourceX = source.offsetLeft;
+    const sourceY = source.offsetTop;
+    const targetX = target.offsetLeft;
+    const targetY = target.offsetTop;
+    const dir = targetX >= sourceX ? 1 : -1;
+
+    // Pivot on the lip corner facing the target; it ends up just above the
+    // target's mouth, slightly off-centre, so the stream falls into it.
+    const pivotX = sourceX + (dir === 1 ? width : 0);
+    const pivotY = sourceY;
+    const lipX = targetX + width / 2 - dir * width * 0.18;
+    const lipY = targetY - unit * 1.15;
+    const dx = lipX - pivotX;
+    const dy = lipY - pivotY;
+
+    // Start from the current lift (a selected tube is already raised).
+    const lift = new DOMMatrixReadOnly(getComputedStyle(source).transform).m42;
+    const rest = `translate(0px, ${lift}px) rotate(0deg)`;
+    const mid = `translate(${dx}px, ${dy}px) rotate(${dir * 18}deg)`;
+    const tilted = `translate(${dx}px, ${dy}px) rotate(${dir * POUR_ANGLE}deg)`;
+    const home = 'translate(0px, 0px) rotate(0deg)';
+
+    source.style.transformOrigin = dir === 1 ? '100% 0' : '0 0';
+    source.classList.add('is-pouring');
+
+    const tilt = source.animate(
+      [
+        { transform: rest },
+        { transform: mid, offset: 0.62 },
+        { transform: tilted },
+      ],
+      { duration: POUR_TILT_MS, easing: 'cubic-bezier(0.45, 0, 0.25, 1)', fill: 'forwards' },
+    );
+    await tilt.finished;
+
+    // The stream runs from the lip down to the target's current surface.
+    const filled = target.querySelectorAll('.unit:not(.is-empty)').length;
+    const glass = target.querySelector<HTMLElement>('.tube__glass');
+    const glassBottom =
+      glass === null ? target.offsetHeight : glass.offsetTop + glass.offsetHeight;
+    const surfaceY = targetY + glassBottom - filled * unit;
+    const stream = document.createElement('span');
+    stream.className = 'pour-stream';
+    stream.dataset.color = String(color);
+    stream.setAttribute('aria-hidden', 'true');
+    const streamWidth = Math.max(3, Math.round(unit * 0.2));
+    stream.style.width = `${streamWidth}px`;
+    stream.style.left = `${lipX - streamWidth / 2}px`;
+    stream.style.top = `${lipY}px`;
+    stream.style.height = `${Math.max(0, surfaceY - lipY)}px`;
+    boardElement.append(stream);
+
+    stream.animate([{ transform: 'scaleY(0)' }, { transform: 'scaleY(1)' }], {
+      duration: 90,
+      easing: 'ease-in',
+      fill: 'forwards',
+    });
+    apply();
+    await wait(POUR_FLOW_MS);
+
+    const end = stream.animate(
+      [
+        { transform: 'scaleY(1)', transformOrigin: '50% 100%' },
+        { transform: 'scaleY(0)', transformOrigin: '50% 100%' },
+      ],
+      { duration: 90, easing: 'ease-out', fill: 'forwards' },
+    );
+    const back = source.animate([{ transform: tilted }, { transform: home }], {
+      duration: POUR_RETURN_MS,
+      easing: 'cubic-bezier(0.3, 0, 0.2, 1)',
+      fill: 'forwards',
+    });
+    await end.finished;
+    stream.remove();
+    await back.finished;
+
+    tilt.cancel();
+    back.cancel();
+    source.classList.remove('is-pouring');
+    source.style.transformOrigin = '';
   }
 
   function completeLevel(level: number, report: boolean): void {
@@ -315,19 +418,32 @@ export function createGameController(deps: GameDeps): GameController {
 
   async function performMove(from: number, to: number): Promise<void> {
     if (state === null) return;
-    const next = applyGameMove(state, from, to);
+    const previous = state;
+    const source = previous.board[from] ?? [];
+    const color = source[source.length - 1] ?? 0;
+    const next = applyGameMove(previous, from, to);
     state = next;
     selection = null;
     locked = true;
     clearHintMessage();
-    const tubes = render();
     persist();
-    await animatePour(tubes[from], tubes[to]);
-    locked = false;
+    await animatePour(from, to, color, () => {
+      render();
+    });
 
     if (isSolved(next)) {
-      completeLevel(next.level.n, true);
+      // Let the last cork pop before the win screen takes over.
+      if (!prefersReducedMotion()) {
+        await wait(WIN_DELAY_MS);
+      }
+      locked = false;
+      // A reload or player switch may have replaced the level meanwhile.
+      if (state === next) {
+        completeLevel(next.level.n, true);
+      }
+      return;
     }
+    locked = false;
   }
 
   async function activate(index: number): Promise<void> {
