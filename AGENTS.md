@@ -132,11 +132,11 @@ Do NOT generate by reversing moves from the solved state.
 
 One responsive app for phone, tablet and desktop browser.
 
-- Layout: phone portrait = 2 rows, controls at the bottom (thumb zone). Desktop = board centered, max ~900 px wide, controls below. Tube size via CSS `clamp()` from viewport; the board never scrolls.
+- Layout: phone portrait = 2 rows, controls at the bottom (thumb zone). Desktop = board centered, max ~900 px wide, controls below. Tube size is computed by `boardMetrics()` in `web/src/ui/board.ts` from the space the board actually has (ResizeObserver) and applied as CSS custom properties; every tube dimension derives from `--unit`. The board never scrolls.
 - Input: Pointer Events only (one code path for mouse and touch). Tap/click tube to select, tap/click target to pour. Tap the selected tube again to deselect.
 - Desktop extras: hover lift on tubes; when a tube is selected, legal targets are highlighted.
 - Keyboard: `1`–`9`, `0` select tubes 1–10, `Q`–`P` select tubes 11–20. Select twice = pour. `Z` / `Ctrl+Z` / `Cmd+Z` = undo, `R` = restart, `Esc` = deselect.
-- Pour animation with CSS transitions. Input is ignored while an animation runs.
+- Pour animation: the source tube flies over the target and tilts (Web Animations API, positions measured at runtime), a stream of the poured color runs down, and liquid levels change via CSS height transitions. Tube nodes are reused between renders so these transitions can run. Input is ignored while an animation runs. A full single-color tube gets a cork.
 - Accessibility: tubes are `<button>`s with `aria-label` (e.g. "Tube 3, top blue, 2 of 4 filled"), visible focus ring, `prefers-reduced-motion` disables animations.
 - Colors: 14 clearly distinguishable colors defined as CSS custom properties. Later: optional symbol overlay for color-blind mode.
 - Screens: family code entry → player picker → game → level complete. No settings maze.
