@@ -1,12 +1,11 @@
 // Board rendering for the Water Sort game screen.
 //
 // The pure helpers at the top are DOM-free and unit-tested. `createBoardView`
-// owns the `[data-board]` grid: it rebuilds the tube buttons on every state
-// change so layers, aria-labels, selection and legal-target highlights can
-// never drift out of sync.
+// owns the `[data-board]` grid. Tube nodes are created once per level and then
+// updated in place, so liquid levels can animate between states (drain, fill,
+// undo, restart) and a running pour animation survives a re-render.
 
 import { colorName } from '@shared/rules';
-import type { Level } from '@shared/generator';
 
 import {
   HIDDEN_UNIT,
@@ -29,6 +28,77 @@ export function boardColumns(tubeCount: number): number {
     return Math.max(1, tubeCount);
   }
   return Math.min(MAX_COLUMNS, Math.ceil(tubeCount / 2));
+}
+
+/** Tube geometry in CSS pixels, all derived from the height of one unit. */
+export type BoardMetrics = {
+  /** Grid columns; rows follow from the tube count. */
+  cols: number;
+  /** Height of one liquid unit. */
+  unit: number;
+  tubeWidth: number;
+  tubeHeight: number;
+  gapX: number;
+  gapY: number;
+};
+
+/** Tube width relative to one unit. */
+const WIDTH_PER_UNIT = 1.1;
+/** Empty glass above a full tube (neck + rim), in units. */
+const HEADROOM_UNITS = 0.75;
+/** Horizontal gap relative to the tube width. */
+const GAP_X_PER_WIDTH = 0.42;
+/** Vertical gap between rows, in units. Leaves room for the selection lift. */
+const GAP_Y_UNITS = 1;
+/** Free space kept above the top row for the selection lift, in units. */
+const LIFT_UNITS = 0.6;
+const MIN_UNIT = 12;
+const MAX_UNIT = 72;
+
+function metricsFor(
+  tubeCount: number,
+  cols: number,
+  capacity: number,
+  width: number,
+  height: number,
+): BoardMetrics {
+  const rows = Math.max(1, Math.ceil(tubeCount / cols));
+  const widthUnits = (cols + (cols - 1) * GAP_X_PER_WIDTH) * WIDTH_PER_UNIT;
+  const heightUnits =
+    rows * (capacity + HEADROOM_UNITS) + (rows - 1) * GAP_Y_UNITS + LIFT_UNITS;
+
+  const fit = Math.min(width / widthUnits, height / heightUnits, MAX_UNIT);
+  const unit = Math.max(MIN_UNIT, Math.floor(fit));
+  const tubeWidth = Math.round(unit * WIDTH_PER_UNIT);
+
+  return {
+    cols,
+    unit,
+    tubeWidth,
+    tubeHeight: Math.round(unit * (capacity + HEADROOM_UNITS)),
+    gapX: Math.round(tubeWidth * GAP_X_PER_WIDTH),
+    gapY: Math.round(unit * GAP_Y_UNITS),
+  };
+}
+
+/**
+ * The largest tube size that fits `tubeCount` tubes of `capacity` units into a
+ * `width` × `height` box. Uses the two-row split of {@link boardColumns}, or a
+ * single row when that gives bigger tubes (wide screens, landscape phones).
+ * Pure, so it can be unit-tested without a DOM.
+ */
+export function boardMetrics(
+  tubeCount: number,
+  capacity: number,
+  width: number,
+  height: number,
+): BoardMetrics {
+  const split = metricsFor(tubeCount, boardColumns(tubeCount), capacity, width, height);
+  if (tubeCount <= MAX_COLUMNS) {
+    return split;
+  }
+  const single = metricsFor(tubeCount, tubeCount, capacity, width, height);
+  return single.unit > split.unit ? single : split;
 }
 
 /**
@@ -65,104 +135,187 @@ export function renderedUnits(state: GameState, index: number): VisibleUnit[] {
   return state.level.hidden ? visibleUnits(tube) : tube.slice();
 }
 
+/** Whether a rendered tube is full with one visible color (gets a cork). */
+export function isTubeComplete(
+  units: readonly VisibleUnit[],
+  capacity: number,
+): boolean {
+  if (units.length !== capacity || capacity === 0) {
+    return false;
+  }
+  const first = units[0];
+  return first !== HIDDEN_UNIT && units.every((unit) => unit === first);
+}
+
 /** A live board bound to a container element. */
 export type BoardView = {
   readonly element: HTMLElement;
   /**
-   * Rebuilds every tube for `state` and returns the buttons in tube order.
+   * Updates every tube for `state` and returns the buttons in tube order.
    * `selection` marks the lifted tube and highlights its legal targets. When
    * `colorBlind` is true every visible unit gets its color's symbol overlay.
-   * Focus on a tube button is restored by index across the rebuild so keyboard
-   * play survives the replaced DOM.
+   * Tube nodes are reused while the tube count and capacity stay the same, so
+   * focus and running animations survive the update.
    */
   update(
     state: GameState,
     selection: number | null,
     colorBlind?: boolean,
   ): HTMLButtonElement[];
+  /** The current tube buttons in tube order. */
+  tubes(): HTMLButtonElement[];
+  /** The geometry currently applied to the board. */
+  metrics(): BoardMetrics;
 };
 
-function createLayer(unit: VisibleUnit, colorBlind: boolean): HTMLDivElement {
-  const layer = document.createElement('div');
-  layer.className = 'unit';
+type TubeNode = {
+  button: HTMLButtonElement;
+  units: HTMLSpanElement[];
+};
+
+function createTube(index: number, capacity: number): TubeNode {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'tube';
+  button.dataset.tube = String(index);
+
+  const glass = document.createElement('span');
+  glass.className = 'tube__glass';
+  const liquid = document.createElement('span');
+  liquid.className = 'tube__liquid';
+
+  const units: HTMLSpanElement[] = [];
+  for (let slot = 0; slot < capacity; slot += 1) {
+    const unit = document.createElement('span');
+    unit.className = 'unit is-empty';
+    // The tube's aria-label names the contents; layers are purely visual.
+    unit.setAttribute('aria-hidden', 'true');
+    liquid.append(unit);
+    units.push(unit);
+  }
+  glass.append(liquid);
+
+  const cork = document.createElement('span');
+  cork.className = 'tube__cork';
+  cork.setAttribute('aria-hidden', 'true');
+
+  button.append(glass, cork);
+  return { button, units };
+}
+
+function updateUnit(
+  node: HTMLSpanElement,
+  unit: VisibleUnit | undefined,
+  isSurface: boolean,
+  colorBlind: boolean,
+): void {
+  if (unit === undefined) {
+    // Keep the last color while the slot drains, so it shrinks instead of
+    // vanishing. An empty slot has no height and is never seen.
+    node.classList.add('is-empty');
+    node.classList.remove('is-hidden', 'is-surface');
+    node.textContent = '';
+    return;
+  }
+
+  node.classList.remove('is-empty');
+  node.classList.toggle('is-surface', isSurface);
   if (unit === HIDDEN_UNIT) {
-    layer.classList.add('is-hidden');
-  } else {
-    layer.dataset.color = String(unit);
-    if (colorBlind) {
+    node.classList.add('is-hidden');
+    node.textContent = '';
+    return;
+  }
+
+  node.classList.remove('is-hidden');
+  node.dataset.color = String(unit);
+  if (colorBlind) {
+    if (node.firstElementChild === null || node.textContent !== colorSymbol(unit)) {
       const symbol = document.createElement('span');
       symbol.className = 'unit__symbol';
-      // The tube's aria-label already names the color, so the glyph is purely
-      // visual and must not be announced a second time.
-      symbol.setAttribute('aria-hidden', 'true');
       symbol.textContent = colorSymbol(unit);
-      layer.append(symbol);
+      node.replaceChildren(symbol);
     }
+  } else if (node.firstChild !== null) {
+    node.textContent = '';
   }
-  return layer;
 }
 
-/** Zero-based index of the tube button that currently has focus, if any. */
-function focusedTubeIndex(root: HTMLElement): number | null {
-  const active = document.activeElement;
-  if (!(active instanceof Element) || !root.contains(active)) {
-    return null;
-  }
-  const tube = active.closest('.tube');
-  if (tube === null) {
-    return null;
-  }
-  const raw = tube.getAttribute('data-tube');
-  if (raw === null) {
-    return null;
-  }
-  const index = Number(raw);
-  return Number.isInteger(index) ? index : null;
+function setMetrics(element: HTMLElement, metrics: BoardMetrics): void {
+  element.style.setProperty('--cols', String(metrics.cols));
+  element.style.setProperty('--unit', `${metrics.unit}px`);
+  element.style.setProperty('--tube-w', `${metrics.tubeWidth}px`);
+  element.style.setProperty('--tube-h', `${metrics.tubeHeight}px`);
+  element.style.setProperty('--gap-x', `${metrics.gapX}px`);
+  element.style.setProperty('--gap-y', `${metrics.gapY}px`);
 }
 
-/** Creates the board view for the `[data-board]` element. */
+/**
+ * Creates the board view for the `[data-board]` element. The board sizes its
+ * tubes to fill its parent and re-fits whenever the parent is resized.
+ */
 export function createBoardView(element: HTMLElement): BoardView {
+  let nodes: TubeNode[] = [];
+  let capacity = 0;
+  let current = boardMetrics(1, 4, 0, 0);
+  const container = element.parentElement ?? element;
+
+  const fit = (): void => {
+    if (nodes.length === 0) return;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    if (width === 0 || height === 0) return;
+    current = boardMetrics(nodes.length, capacity, width, height);
+    setMetrics(element, current);
+  };
+
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(fit).observe(container);
+  }
+
   const update = (
     state: GameState,
     selection: number | null,
     colorBlind = false,
   ): HTMLButtonElement[] => {
-    const capacity = state.level.capacity;
-    // Capture before the rebuild detaches the focused button.
-    const focused = focusedTubeIndex(element);
+    const levelCapacity = state.level.capacity;
+    const attached = nodes[0]?.button.parentElement === element;
+    if (
+      !attached ||
+      nodes.length !== state.board.length ||
+      capacity !== levelCapacity
+    ) {
+      capacity = levelCapacity;
+      nodes = state.board.map((_, index) => createTube(index, levelCapacity));
+      element.replaceChildren(...nodes.map((node) => node.button));
+      element.style.setProperty('--cols', String(boardColumns(nodes.length)));
+      fit();
+    }
+
     element.classList.toggle('is-color-blind', colorBlind);
-    element.style.setProperty('--cols', String(boardColumns(state.board.length)));
-    element.style.setProperty('--capacity', String(capacity));
-    element.replaceChildren();
 
-    const buttons: HTMLButtonElement[] = [];
-    for (let index = 0; index < state.board.length; index += 1) {
+    nodes.forEach((node, index) => {
       const units = renderedUnits(state, index);
+      node.units.forEach((slot, position) => {
+        updateUnit(slot, units[position], position === units.length - 1, colorBlind);
+      });
 
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'tube';
-      button.dataset.tube = String(index);
-      for (const unit of units) {
-        button.append(createLayer(unit, colorBlind));
-      }
-      button.setAttribute('aria-label', tubeAriaLabel(index, units, capacity));
+      const { button } = node;
+      button.setAttribute('aria-label', tubeAriaLabel(index, units, levelCapacity));
+      button.classList.toggle('is-selected', selection === index);
+      button.classList.toggle(
+        'is-legal',
+        selection !== null && selection !== index && canMove(state, selection, index),
+      );
+      button.classList.toggle('is-complete', isTubeComplete(units, levelCapacity));
+    });
 
-      if (selection === index) {
-        button.classList.add('is-selected');
-      } else if (selection !== null && canMove(state, selection, index)) {
-        button.classList.add('is-legal');
-      }
-
-      element.append(button);
-      buttons.push(button);
-    }
-
-    if (focused !== null) {
-      buttons[focused]?.focus();
-    }
-    return buttons;
+    return nodes.map((node) => node.button);
   };
 
-  return { element, update };
+  return {
+    element,
+    update,
+    tubes: () => nodes.map((node) => node.button),
+    metrics: () => current,
+  };
 }
